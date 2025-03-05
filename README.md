@@ -20,6 +20,7 @@ A modern file viewer application for developers to easily navigate, search, and 
 - **Dark Mode**: Toggle between light and dark themes for comfortable viewing in any environment
 - **Binary File Detection**: Automatic detection and exclusion of binary files
 - **Smart File Exclusion**: Automatically excludes common files like package-lock.json, binary files, and more by default
+- **User Instructions**: You can add special instructions for the LLM to follow when processing the concatenated files
 
 ## Installation
 
