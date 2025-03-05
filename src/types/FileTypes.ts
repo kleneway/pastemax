@@ -72,3 +72,5 @@ export interface CopyButtonProps {
   isDisabled: boolean;
   copyStatus: boolean;
 }
+
+export type FileTreeMode = "none" | "selected" | "selected-with-roots" | "complete";

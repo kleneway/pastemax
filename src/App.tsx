@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
-import { FileData } from "./types/FileTypes";
+import { FileData, FileTreeMode } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
-import { generateAsciiFileTree } from "./utils/pathUtils";
+import FileTreeToggle from "./components/FileTreeToggle";
+import { generateAsciiFileTree, getTopLevelDirectories, getAllDirectories } from "./utils/pathUtils";
 
 // Access the electron API from the window object
 declare global {
@@ -30,6 +31,7 @@ const STORAGE_KEYS = {
   SORT_ORDER: "pastemax-sort-order",
   SEARCH_TERM: "pastemax-search-term",
   EXPANDED_NODES: "pastemax-expanded-nodes",
+  FILE_TREE_MODE: "pastemax-file-tree-mode",
 };
 
 const App = () => {
@@ -60,7 +62,13 @@ const App = () => {
       message: string;
     }
   );
-  const [includeFileTree, setIncludeFileTree] = useState(false);
+  // Load saved file tree mode from localStorage
+  const savedFileTreeMode = localStorage.getItem(STORAGE_KEYS.FILE_TREE_MODE);
+  const validModes: FileTreeMode[] = ["none", "selected", "selected-with-roots", "complete"];
+  const initialMode: FileTreeMode = validModes.includes(savedFileTreeMode as FileTreeMode) 
+    ? (savedFileTreeMode as FileTreeMode) 
+    : "none";
+  const [fileTreeMode, setFileTreeMode] = useState(initialMode);
   
 
 
@@ -110,6 +118,11 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, searchTerm);
   }, [searchTerm]);
+
+  // Persist file tree mode when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.FILE_TREE_MODE, fileTreeMode);
+  }, [fileTreeMode]);
 
   // Load initial data from saved folder
   useEffect(() => {
@@ -351,18 +364,96 @@ const App = () => {
       return "No files selected.";
     }
 
-    let concatenatedString = "";
+    // Start with opening file_contents tag
+    let concatenatedString = "<codebase>\n";
     
     // Add ASCII file tree if enabled
-    if (includeFileTree && selectedFolder) {
-      const asciiTree = generateAsciiFileTree(sortedSelected, selectedFolder);
+    if (fileTreeMode !== "none" && selectedFolder) {
+      let fileTreeItems: { path: string; isFile?: boolean }[] = [];
+
+      if (fileTreeMode === "selected") {
+        // Only include selected files
+        fileTreeItems = sortedSelected.map((file: FileData) => ({ path: file.path, isFile: true }));
+      } else if (fileTreeMode === "selected-with-roots") {
+        // Include all directories and selected files to show the complete folder structure
+        const allDirs = getAllDirectories(allFiles, selectedFolder);
+        fileTreeItems = [
+          ...allDirs.map(dir => ({ path: dir, isFile: false })),
+          ...sortedSelected.map((file: FileData) => ({ path: file.path, isFile: true }))
+        ];
+      } else if (fileTreeMode === "complete") {
+        // Include all files
+        fileTreeItems = allFiles.map((file: FileData) => ({ path: file.path, isFile: true }));
+      }
+
+      const asciiTree = generateAsciiFileTree(fileTreeItems, selectedFolder);
       concatenatedString += `<file_map>\n${selectedFolder}\n${asciiTree}\n</file_map>\n\n`;
     }
     
     sortedSelected.forEach((file: FileData) => {
-      concatenatedString += `\n\n// ---- File: ${file.name} ----\n\n`;
-      concatenatedString += file.content;
+      // Calculate the relative path from the selected folder
+      const normalizedFilePath = file.path.replace(/\\/g, "/");
+      const normalizedRootPath = selectedFolder ? selectedFolder.replace(/\\/g, "/").replace(/\/$/, "") : "";
+      
+      // Get the path relative to the project root
+      let relativePath = file.path;
+      if (normalizedRootPath && normalizedFilePath.startsWith(normalizedRootPath + "/")) {
+        relativePath = normalizedFilePath.substring(normalizedRootPath.length + 1);
+      }
+      
+      // Determine the file extension for the code block language
+      const extension = file.path.split('.').pop() || '';
+      
+      // Map file extensions to appropriate language identifiers for code blocks
+      let languageIdentifier = extension;
+      // Web development languages
+      if (extension === 'js') languageIdentifier = 'javascript';
+      else if (extension === 'ts') languageIdentifier = 'typescript';
+      else if (extension === 'tsx') languageIdentifier = 'tsx';
+      else if (extension === 'jsx') languageIdentifier = 'jsx';
+      else if (extension === 'css') languageIdentifier = 'css';
+      else if (extension === 'scss' || extension === 'sass') languageIdentifier = 'scss';
+      else if (extension === 'less') languageIdentifier = 'less';
+      else if (extension === 'html') languageIdentifier = 'html';
+      else if (extension === 'json') languageIdentifier = 'json';
+      else if (extension === 'md') languageIdentifier = 'markdown';
+      else if (extension === 'xml') languageIdentifier = 'xml';
+      else if (extension === 'svg') languageIdentifier = 'svg';
+      
+      // Backend languages
+      else if (extension === 'py') languageIdentifier = 'python';
+      else if (extension === 'rb') languageIdentifier = 'ruby';
+      else if (extension === 'php') languageIdentifier = 'php';
+      else if (extension === 'java') languageIdentifier = 'java';
+      else if (extension === 'cs') languageIdentifier = 'csharp';
+      else if (extension === 'go') languageIdentifier = 'go';
+      else if (extension === 'rs') languageIdentifier = 'rust';
+      else if (extension === 'swift') languageIdentifier = 'swift';
+      else if (extension === 'kt' || extension === 'kts') languageIdentifier = 'kotlin';
+      else if (extension === 'c' || extension === 'h') languageIdentifier = 'c';
+      else if (extension === 'cpp' || extension === 'cc' || extension === 'cxx' || extension === 'hpp') languageIdentifier = 'cpp';
+      
+      // Shell and configuration
+      else if (extension === 'sh' || extension === 'bash') languageIdentifier = 'bash';
+      else if (extension === 'ps1') languageIdentifier = 'powershell';
+      else if (extension === 'bat' || extension === 'cmd') languageIdentifier = 'batch';
+      else if (extension === 'yaml' || extension === 'yml') languageIdentifier = 'yaml';
+      else if (extension === 'toml') languageIdentifier = 'toml';
+      else if (extension === 'ini') languageIdentifier = 'ini';
+      else if (extension === 'dockerfile' || file.path.toLowerCase().endsWith('dockerfile')) languageIdentifier = 'dockerfile';
+      
+      // Database
+      else if (extension === 'sql') languageIdentifier = 'sql';
+      
+      // Fallback to plaintext if no matching language is found
+      else if (!languageIdentifier) languageIdentifier = 'plaintext';
+      
+      // Add file content with file header and code block
+      concatenatedString += `\nFile: ${relativePath}\n\`\`\`${languageIdentifier}\n${file.content}\n\`\`\`\n`;
     });
+    
+    // Close file_contents tag
+    concatenatedString += "</codebase>";
 
     return concatenatedString;
   };
@@ -512,18 +603,13 @@ const App = () => {
               />
 
               <div className="copy-button-container">
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%", maxWidth: "400px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={includeFileTree}
-                      onChange={() => setIncludeFileTree(!includeFileTree)}
-                    />
-                    <span>Include File Tree</span>
-                  </label>
+                <div className="file-tree-options-container">
+                  <div className="file-tree-format-container">
+                    <FileTreeToggle currentMode={fileTreeMode} onChange={setFileTreeMode} />
+                  </div>
                   <CopyButton
                     text={getSelectedFilesContent()}
-                    className="primary full-width"
+                    className="primary"
                   >
                     <span>COPY ALL SELECTED ({selectedFiles.length} files)</span>
                   </CopyButton>

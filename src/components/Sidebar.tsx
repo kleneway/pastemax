@@ -3,6 +3,12 @@ import { SidebarProps, TreeNode } from "../types/FileTypes";
 import SearchBar from "./SearchBar";
 import TreeItem from "./TreeItem";
 
+// Custom type for resize events
+type ResizeMouseEvent = {
+  preventDefault: () => void;
+  clientX: number;
+};
+
 const Sidebar = ({
   selectedFolder,
   openFolder,
@@ -17,7 +23,7 @@ const Sidebar = ({
   expandedNodes,
   toggleExpanded,
 }: SidebarProps) => {
-  const [fileTree, setFileTree] = useState<TreeNode[]>([]);
+  const [fileTree, setFileTree] = useState([] as TreeNode[]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
@@ -27,7 +33,7 @@ const Sidebar = ({
   const MAX_SIDEBAR_WIDTH = 500;
 
   // Handle mouse down for resizing
-  const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleResizeStart = (e: ResizeMouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
   };

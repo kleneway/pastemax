@@ -14,6 +14,7 @@
   --error-color: #e74c3c;
   --primary-button-background: #000000;
   --primary-button-text: #ffffff;
+  --file-card-selected-border: #808080;
 }
 
 .dark-mode {
@@ -32,6 +33,7 @@
   --error-color: #e74c3c;
   --primary-button-background: #0E639C;
   --primary-button-text: #ffffff;
+  --file-card-selected-border: #3E3E42;
 }
 
 * {
@@ -494,8 +496,12 @@ input[type="search"]:focus {
 }
 
 .file-card.selected {
-  border: 2px solid var(--accent-blue);
+  border: 2px solid var(--file-card-selected-border);
   background-color: var(--background-selected);
+}
+
+.dark-mode .file-card.selected {
+  border: 2px solid var(--file-card-selected-border);
 }
 
 .file-card-header {
@@ -579,26 +585,43 @@ input[type="search"]:focus {
 
 .copy-button-container {
   padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: center;
-  align-items: center;
+  border-top: 1px solid var(--border-color);
   background-color: var(--background-primary);
+  margin-top: auto;
+}
+
+.file-tree-format-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.file-tree-options-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
 }
 
 .copy-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 16px;
-  font-weight: 600;
-  border-radius: 4px;
-  transition: all 0.2s ease;
   gap: 8px;
-  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
   cursor: pointer;
-  color: var(--primary-button-text);
-  background-color: var(--primary-button-background);
+  transition: background-color 0.2s, transform 0.1s;
+  border: 1px solid var(--border-color);
+  width: 100%;
 }
 
 .copy-button.primary {
