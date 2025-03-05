@@ -73,13 +73,62 @@ export function extname(path: string | null | undefined): string {
 }
 
 /**
+ * Get the top-level directories from a list of files
+ * @param files Array of file objects with path property
+ * @param rootPath The root directory path
+ * @returns Array of top-level directory paths
+ */
+export function getTopLevelDirectories(files: { path: string }[], rootPath: string): string[] {
+  const topLevelDirs = new Set<string>();
+  const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/\/$/, "");
+
+  files.forEach(file => {
+    const normalizedPath = file.path.replace(/\\/g, "/");
+    if (normalizedPath.startsWith(normalizedRoot + "/")) {
+      const relativePath = normalizedPath.substring(normalizedRoot.length + 1);
+      const parts = relativePath.split("/");
+      if (parts.length > 0) {
+        topLevelDirs.add(`${normalizedRoot}/${parts[0]}`);
+      }
+    }
+  });
+
+  return Array.from(topLevelDirs);
+}
+
+/**
+ * Get all directories (including nested ones) from a list of files
+ * @param files Array of file objects with path property
+ * @param rootPath The root directory path
+ * @returns Array of all directory paths
+ */
+export function getAllDirectories(files: { path: string }[], rootPath: string): string[] {
+  const directories = new Set<string>();
+  const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/\/$/, "");
+
+  files.forEach(file => {
+    const normalizedPath = file.path.replace(/\\/g, "/");
+    if (normalizedPath.startsWith(normalizedRoot + "/")) {
+      // Extract all parent directories from file path
+      let currentPath = dirname(normalizedPath);
+      while (currentPath !== normalizedRoot && currentPath.length > normalizedRoot.length) {
+        directories.add(currentPath);
+        currentPath = dirname(currentPath);
+      }
+    }
+  });
+
+  return Array.from(directories);
+}
+
+/**
  * Generate an ASCII representation of the file tree for the selected files
- * @param files Array of selected FileData objects
+ * @param items Array of objects containing path and isFile flag
  * @param rootPath The root directory path
  * @returns ASCII string representing the file tree
  */
-export function generateAsciiFileTree(files: { path: string }[], rootPath: string): string {
-  if (!files.length) return "No files selected.";
+export function generateAsciiFileTree(items: { path: string; isFile?: boolean }[], rootPath: string): string {
+  if (!items.length) return "No files selected.";
 
   // Normalize the root path for consistent path handling
   const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/\/$/, "");
@@ -94,8 +143,9 @@ export function generateAsciiFileTree(files: { path: string }[], rootPath: strin
   const root: TreeNode = { name: basename(normalizedRoot), isFile: false, children: {} };
   
   // Insert a file path into the tree
-  const insertPath = (filePath: string, node: TreeNode) => {
-    const normalizedPath = filePath.replace(/\\/g, "/");
+  const insertPath = (item: { path: string; isFile?: boolean }, node: TreeNode) => {
+    const { path: itemPath, isFile = true } = item;
+    const normalizedPath = itemPath.replace(/\\/g, "/");
     if (!normalizedPath.startsWith(normalizedRoot)) return;
     
     const relativePath = normalizedPath.substring(normalizedRoot.length).replace(/^\//, "");
@@ -106,22 +156,27 @@ export function generateAsciiFileTree(files: { path: string }[], rootPath: strin
     
     for (let i = 0; i < pathParts.length; i++) {
       const part = pathParts[i];
-      const isFile = i === pathParts.length - 1;
+      const isLast = i === pathParts.length - 1;
+      const nodeIsFile = isLast && isFile;
       
       if (!currentNode.children[part]) {
         currentNode.children[part] = {
           name: part,
-          isFile,
+          isFile: nodeIsFile,
           children: {}
         };
+      } else if (isLast) {
+        // If we're overriding an existing node and it's the last part,
+        // respect the isFile flag
+        currentNode.children[part].isFile = nodeIsFile;
       }
       
       currentNode = currentNode.children[part];
     }
   };
   
-  // Insert all files into the tree
-  files.forEach(file => insertPath(file.path, root));
+  // Insert all items into the tree
+  items.forEach(item => insertPath(item, root));
   
   // Generate ASCII representation
   const generateAscii = (node: TreeNode, prefix = "", isLast = true, isRoot = true): string => {

@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
-import { FileData } from "./types/FileTypes";
+import { FileData, FileTreeMode } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
-import { generateAsciiFileTree } from "./utils/pathUtils";
+import FileTreeToggle from "./components/FileTreeToggle";
+import { generateAsciiFileTree, getTopLevelDirectories, getAllDirectories } from "./utils/pathUtils";
 
 // Access the electron API from the window object
 declare global {
@@ -30,6 +31,7 @@ const STORAGE_KEYS = {
   SORT_ORDER: "pastemax-sort-order",
   SEARCH_TERM: "pastemax-search-term",
   EXPANDED_NODES: "pastemax-expanded-nodes",
+  FILE_TREE_MODE: "pastemax-file-tree-mode",
 };
 
 const App = () => {
@@ -60,7 +62,13 @@ const App = () => {
       message: string;
     }
   );
-  const [includeFileTree, setIncludeFileTree] = useState(false);
+  // Load saved file tree mode from localStorage
+  const savedFileTreeMode = localStorage.getItem(STORAGE_KEYS.FILE_TREE_MODE);
+  const validModes: FileTreeMode[] = ["none", "selected", "selected-with-roots", "complete"];
+  const initialMode: FileTreeMode = validModes.includes(savedFileTreeMode as FileTreeMode) 
+    ? (savedFileTreeMode as FileTreeMode) 
+    : "none";
+  const [fileTreeMode, setFileTreeMode] = useState(initialMode);
   
 
 
@@ -110,6 +118,11 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, searchTerm);
   }, [searchTerm]);
+
+  // Persist file tree mode when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.FILE_TREE_MODE, fileTreeMode);
+  }, [fileTreeMode]);
 
   // Load initial data from saved folder
   useEffect(() => {
@@ -354,8 +367,25 @@ const App = () => {
     let concatenatedString = "";
     
     // Add ASCII file tree if enabled
-    if (includeFileTree && selectedFolder) {
-      const asciiTree = generateAsciiFileTree(sortedSelected, selectedFolder);
+    if (fileTreeMode !== "none" && selectedFolder) {
+      let fileTreeItems: { path: string; isFile?: boolean }[] = [];
+
+      if (fileTreeMode === "selected") {
+        // Only include selected files
+        fileTreeItems = sortedSelected.map((file: FileData) => ({ path: file.path, isFile: true }));
+      } else if (fileTreeMode === "selected-with-roots") {
+        // Include all directories and selected files to show the complete folder structure
+        const allDirs = getAllDirectories(allFiles, selectedFolder);
+        fileTreeItems = [
+          ...allDirs.map(dir => ({ path: dir, isFile: false })),
+          ...sortedSelected.map((file: FileData) => ({ path: file.path, isFile: true }))
+        ];
+      } else if (fileTreeMode === "complete") {
+        // Include all files
+        fileTreeItems = allFiles.map((file: FileData) => ({ path: file.path, isFile: true }));
+      }
+
+      const asciiTree = generateAsciiFileTree(fileTreeItems, selectedFolder);
       concatenatedString += `<file_map>\n${selectedFolder}\n${asciiTree}\n</file_map>\n\n`;
     }
     
@@ -512,18 +542,13 @@ const App = () => {
               />
 
               <div className="copy-button-container">
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%", maxWidth: "400px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={includeFileTree}
-                      onChange={() => setIncludeFileTree(!includeFileTree)}
-                    />
-                    <span>Include File Tree</span>
-                  </label>
+                <div className="file-tree-options-container">
+                  <div className="file-tree-format-container">
+                    <FileTreeToggle currentMode={fileTreeMode} onChange={setFileTreeMode} />
+                  </div>
                   <CopyButton
                     text={getSelectedFilesContent()}
-                    className="primary full-width"
+                    className="primary"
                   >
                     <span>COPY ALL SELECTED ({selectedFiles.length} files)</span>
                   </CopyButton>
