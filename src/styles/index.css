@@ -887,5 +887,4 @@ input[type="text"].search-input:focus {
   padding: 4px 0px 4px 16px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--background-primary);
-  outline: 2px solid orange;
 }
