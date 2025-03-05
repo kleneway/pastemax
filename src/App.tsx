@@ -364,7 +364,8 @@ const App = () => {
       return "No files selected.";
     }
 
-    let concatenatedString = "";
+    // Start with opening file_contents tag
+    let concatenatedString = "<codebase>\n";
     
     // Add ASCII file tree if enabled
     if (fileTreeMode !== "none" && selectedFolder) {
@@ -390,9 +391,69 @@ const App = () => {
     }
     
     sortedSelected.forEach((file: FileData) => {
-      concatenatedString += `\n\n// ---- File: ${file.name} ----\n\n`;
-      concatenatedString += file.content;
+      // Calculate the relative path from the selected folder
+      const normalizedFilePath = file.path.replace(/\\/g, "/");
+      const normalizedRootPath = selectedFolder ? selectedFolder.replace(/\\/g, "/").replace(/\/$/, "") : "";
+      
+      // Get the path relative to the project root
+      let relativePath = file.path;
+      if (normalizedRootPath && normalizedFilePath.startsWith(normalizedRootPath + "/")) {
+        relativePath = normalizedFilePath.substring(normalizedRootPath.length + 1);
+      }
+      
+      // Determine the file extension for the code block language
+      const extension = file.path.split('.').pop() || '';
+      
+      // Map file extensions to appropriate language identifiers for code blocks
+      let languageIdentifier = extension;
+      // Web development languages
+      if (extension === 'js') languageIdentifier = 'javascript';
+      else if (extension === 'ts') languageIdentifier = 'typescript';
+      else if (extension === 'tsx') languageIdentifier = 'tsx';
+      else if (extension === 'jsx') languageIdentifier = 'jsx';
+      else if (extension === 'css') languageIdentifier = 'css';
+      else if (extension === 'scss' || extension === 'sass') languageIdentifier = 'scss';
+      else if (extension === 'less') languageIdentifier = 'less';
+      else if (extension === 'html') languageIdentifier = 'html';
+      else if (extension === 'json') languageIdentifier = 'json';
+      else if (extension === 'md') languageIdentifier = 'markdown';
+      else if (extension === 'xml') languageIdentifier = 'xml';
+      else if (extension === 'svg') languageIdentifier = 'svg';
+      
+      // Backend languages
+      else if (extension === 'py') languageIdentifier = 'python';
+      else if (extension === 'rb') languageIdentifier = 'ruby';
+      else if (extension === 'php') languageIdentifier = 'php';
+      else if (extension === 'java') languageIdentifier = 'java';
+      else if (extension === 'cs') languageIdentifier = 'csharp';
+      else if (extension === 'go') languageIdentifier = 'go';
+      else if (extension === 'rs') languageIdentifier = 'rust';
+      else if (extension === 'swift') languageIdentifier = 'swift';
+      else if (extension === 'kt' || extension === 'kts') languageIdentifier = 'kotlin';
+      else if (extension === 'c' || extension === 'h') languageIdentifier = 'c';
+      else if (extension === 'cpp' || extension === 'cc' || extension === 'cxx' || extension === 'hpp') languageIdentifier = 'cpp';
+      
+      // Shell and configuration
+      else if (extension === 'sh' || extension === 'bash') languageIdentifier = 'bash';
+      else if (extension === 'ps1') languageIdentifier = 'powershell';
+      else if (extension === 'bat' || extension === 'cmd') languageIdentifier = 'batch';
+      else if (extension === 'yaml' || extension === 'yml') languageIdentifier = 'yaml';
+      else if (extension === 'toml') languageIdentifier = 'toml';
+      else if (extension === 'ini') languageIdentifier = 'ini';
+      else if (extension === 'dockerfile' || file.path.toLowerCase().endsWith('dockerfile')) languageIdentifier = 'dockerfile';
+      
+      // Database
+      else if (extension === 'sql') languageIdentifier = 'sql';
+      
+      // Fallback to plaintext if no matching language is found
+      else if (!languageIdentifier) languageIdentifier = 'plaintext';
+      
+      // Add file content with file header and code block
+      concatenatedString += `\nFile: ${relativePath}\n\`\`\`${languageIdentifier}\n${file.content}\n\`\`\`\n`;
     });
+    
+    // Close file_contents tag
+    concatenatedString += "</codebase>";
 
     return concatenatedString;
   };
