@@ -14,6 +14,7 @@
   --error-color: #e74c3c;
   --primary-button-background: #000000;
   --primary-button-text: #ffffff;
+  --file-card-selected-border: #808080;
 }
 
 .dark-mode {
@@ -32,6 +33,7 @@
   --error-color: #e74c3c;
   --primary-button-background: #0E639C;
   --primary-button-text: #ffffff;
+  --file-card-selected-border: #3E3E42;
 }
 
 * {
@@ -494,8 +496,12 @@ input[type="search"]:focus {
 }
 
 .file-card.selected {
-  border: 2px solid var(--accent-blue);
+  border: 2px solid var(--file-card-selected-border);
   background-color: var(--background-selected);
+}
+
+.dark-mode .file-card.selected {
+  border: 2px solid var(--file-card-selected-border);
 }
 
 .file-card-header {
