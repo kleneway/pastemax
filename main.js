@@ -3,40 +3,28 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-// Add handling for the 'ignore' module
+// Load ignore module with fallback
 let ignore;
 try {
   ignore = require("ignore");
   console.log("Successfully loaded ignore module");
 } catch (err) {
   console.error("Failed to load ignore module:", err);
-  // Simple fallback implementation for when the ignore module fails to load
   ignore = {
-    // Simple implementation that just matches exact paths
-    createFilter: () => {
-      return (path) => !excludedFiles.includes(path);
-    },
+    createFilter: () => (filePath) => !excludedFiles.includes(filePath),
   };
   console.log("Using fallback for ignore module");
 }
 
-/**
- * Normalize file paths to use forward slashes regardless of OS
- * This ensures consistent path formatting between main and renderer processes
- */
 function normalizePath(filePath) {
   if (!filePath) return filePath;
-  return filePath.replace(/\\/g, '/');
+  return filePath.replace(/\\/g, "/");
 }
 
-/**
- * Get the platform-specific path separator
- */
 function getPathSeparator() {
-  return os.platform() === 'win32' ? '\\' : '/';
+  return os.platform() === "win32" ? "\\" : "/";
 }
 
-// Initialize tokenizer with better error handling
 let tiktoken;
 try {
   tiktoken = require("tiktoken");
@@ -46,28 +34,23 @@ try {
   tiktoken = null;
 }
 
-// Import the excluded files list
 const { excludedFiles, binaryExtensions } = require("./excluded-files");
 
-// Initialize the encoder once at startup with better error handling
 let encoder;
 try {
   if (tiktoken) {
-    encoder = tiktoken.get_encoding("o200k_base"); // gpt-4o encoding
+    encoder = tiktoken.get_encoding("o200k_base");
     console.log("Tiktoken encoder initialized successfully");
   } else {
     throw new Error("Tiktoken module not available");
   }
 } catch (err) {
   console.error("Failed to initialize tiktoken encoder:", err);
-  // Fallback to a simpler method if tiktoken fails
   console.log("Using fallback token counter");
   encoder = null;
 }
 
-// Binary file extensions that should be excluded from token counting
 const BINARY_EXTENSIONS = [
-  // Images
   ".jpg",
   ".jpeg",
   ".png",
@@ -77,7 +60,6 @@ const BINARY_EXTENSIONS = [
   ".ico",
   ".webp",
   ".svg",
-  // Audio/Video
   ".mp3",
   ".mp4",
   ".wav",
@@ -86,13 +68,11 @@ const BINARY_EXTENSIONS = [
   ".mov",
   ".mkv",
   ".flac",
-  // Archives
   ".zip",
   ".rar",
   ".tar",
   ".gz",
   ".7z",
-  // Documents
   ".pdf",
   ".doc",
   ".docx",
@@ -100,23 +80,19 @@ const BINARY_EXTENSIONS = [
   ".pptx",
   ".xls",
   ".xlsx",
-  // Compiled
   ".exe",
   ".dll",
   ".so",
   ".class",
   ".o",
   ".pyc",
-  // Database
   ".db",
   ".sqlite",
   ".sqlite3",
-  // Others
   ".bin",
   ".dat",
-].concat(binaryExtensions || []); // Add any additional binary extensions from excluded-files.js
+].concat(binaryExtensions || []);
 
-// Max file size to read (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 function createWindow() {
@@ -127,71 +103,57 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
-      devTools: {
-        // Add these settings to prevent Autofill warnings
-        isDevToolsExtension: false,
-        htmlFullscreen: false,
-      },
     },
   });
 
-  // In development, load from Vite dev server
-  // In production, load from built files
-  const isDev = process.env.NODE_ENV === "development";
+  const isDev =
+    process.env.NODE_ENV === "development" || process.env.ELECTRON_START_URL;
   if (isDev) {
-    // Use the URL provided by the dev script, or fall back to default
     const startUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
-    // Wait a moment for dev server to be ready
+    console.log(`Loading from dev server: ${startUrl}`);
+
     setTimeout(() => {
-      // Clear any cached data to prevent redirection loops
       mainWindow.webContents.session.clearCache().then(() => {
         mainWindow.loadURL(startUrl);
-        // Open DevTools in development mode with options to reduce warnings
-        if (mainWindow.webContents.isDevToolsOpened()) {
-          mainWindow.webContents.closeDevTools();
-        }
         mainWindow.webContents.openDevTools({ mode: "detach" });
-        console.log(`Loading from dev server at ${startUrl}`);
       });
     }, 1000);
   } else {
+    // Use __dirname for production; ensure the 'dist' folder is packaged with your app.
     const indexPath = path.join(__dirname, "dist", "index.html");
-    console.log(`Loading from built files at ${indexPath}`);
-
-    // Use loadURL with file protocol for better path resolution
-    const indexUrl = `file://${indexPath}`;
-    mainWindow.loadURL(indexUrl);
+    console.log(`Loading from built files at: ${indexPath}`);
+    mainWindow.loadFile(indexPath).catch((err) => {
+      console.error("Error loading production build:", err);
+    });
   }
 
-  // Add basic error handling for failed loads
   mainWindow.webContents.on(
     "did-fail-load",
-    (event, errorCode, errorDescription, validatedURL) => {
+    async (event, errorCode, errorDescription, validatedURL) => {
       console.error(
-        `Failed to load the application: ${errorDescription} (${errorCode})`,
+        `Failed to load: ${validatedURL} - ${errorDescription} (${errorCode})`
       );
-      console.error(`Attempted to load URL: ${validatedURL}`);
 
       if (isDev) {
         const retryUrl =
           process.env.ELECTRON_START_URL || "http://localhost:3000";
-        // Clear cache before retrying
-        mainWindow.webContents.session.clearCache().then(() => {
-          setTimeout(() => mainWindow.loadURL(retryUrl), 1000);
-        });
+        console.log(`Retrying dev server: ${retryUrl}`);
+        await mainWindow.webContents.session.clearCache();
+        setTimeout(() => mainWindow.loadURL(retryUrl), 1000);
       } else {
-        // Retry with explicit file URL
         const indexPath = path.join(__dirname, "dist", "index.html");
-        const indexUrl = `file://${indexPath}`;
-        mainWindow.loadURL(indexUrl);
+        console.log(`Retrying production build: ${indexPath}`);
+        await mainWindow.webContents.session.clearCache();
+        mainWindow.loadFile(indexPath);
       }
-    },
+    }
   );
 }
 
+module.exports = { createWindow };
+
 app.whenReady().then(() => {
   createWindow();
-
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -302,7 +264,7 @@ function readFilesRecursively(dir, rootDir, ignoreFilter) {
       const fullPath = path.join(dir, dirent.name);
       // Recursively read subdirectory
       results = results.concat(
-        readFilesRecursively(fullPath, rootDir, ignoreFilter),
+        readFilesRecursively(fullPath, rootDir, ignoreFilter)
       );
     });
 
@@ -410,7 +372,7 @@ ipcMain.on("request-file-list", (event, folderPath) => {
       const serializableFiles = files.map((file) => {
         // Normalize the path to use forward slashes consistently
         const normalizedPath = normalizePath(file.path);
-        
+
         // Create a clean file object
         return {
           name: file.name ? String(file.name) : "",
@@ -426,7 +388,10 @@ ipcMain.on("request-file-list", (event, folderPath) => {
           isSkipped: Boolean(file.isSkipped),
           error: file.error ? String(file.error) : null,
           fileType: file.fileType ? String(file.fileType) : null,
-          excludedByDefault: shouldExcludeByDefault(normalizedPath, normalizePath(folderPath)), // Also normalize here
+          excludedByDefault: shouldExcludeByDefault(
+            normalizedPath,
+            normalizePath(folderPath)
+          ), // Also normalize here
         };
       });
 
@@ -435,11 +400,11 @@ ipcMain.on("request-file-list", (event, folderPath) => {
         // Log a sample of paths to check normalization
         if (serializableFiles.length > 0) {
           console.log("Sample file paths (first 3):");
-          serializableFiles.slice(0, 3).forEach(file => {
+          serializableFiles.slice(0, 3).forEach((file) => {
             console.log(`- ${file.path}`);
           });
         }
-        
+
         event.sender.send("file-list-data", serializableFiles);
       } catch (sendErr) {
         console.error("Error sending file data:", sendErr);
