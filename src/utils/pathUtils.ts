@@ -3,6 +3,52 @@
  */
 
 /**
+ * Normalizes a file path to use forward slashes regardless of operating system
+ * This helps with path comparison across different platforms
+ * 
+ * @param filePath The file path to normalize
+ * @returns The normalized path with forward slashes
+ */
+export function normalizePath(filePath: string): string {
+  if (!filePath) return filePath;
+  
+  // Replace backslashes with forward slashes
+  return filePath.replace(/\\/g, '/');
+}
+
+/**
+ * Detects the operating system
+ * 
+ * @returns The detected operating system ('windows', 'mac', 'linux', or 'unknown')
+ */
+export function detectOS(): 'windows' | 'mac' | 'linux' | 'unknown' {
+  if (typeof window !== 'undefined' && window.navigator) {
+    const platform = window.navigator.platform.toLowerCase();
+    
+    if (platform.includes('win')) {
+      return 'windows';
+    } else if (platform.includes('mac')) {
+      return 'mac';
+    } else if (platform.includes('linux')) {
+      return 'linux';
+    }
+  }
+  
+  return 'unknown';
+}
+
+/**
+ * Compares two paths for equality, handling different OS path separators
+ * 
+ * @param path1 First path to compare
+ * @param path2 Second path to compare
+ * @returns True if the paths are equivalent, false otherwise
+ */
+export function arePathsEqual(path1: string, path2: string): boolean {
+  return normalizePath(path1) === normalizePath(path2);
+}
+
+/**
  * Extract the basename from a path string
  * @param path The path to extract the basename from
  * @returns The basename (last part of the path)

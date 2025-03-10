@@ -6,7 +6,7 @@ import UserInstructions from "./components/UserInstructions";
 import { FileData } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
-import { generateAsciiFileTree } from "./utils/pathUtils";
+import { generateAsciiFileTree, normalizePath, arePathsEqual } from "./utils/pathUtils";
 
 // Access the electron API from the window object
 declare global {
@@ -261,29 +261,46 @@ const App = () => {
 
   // Toggle file selection
   const toggleFileSelection = (filePath: string) => {
+    // Normalize the incoming file path to handle cross-platform issues
+    const normalizedPath = normalizePath(filePath);
+    
     setSelectedFiles((prev: string[]) => {
-      if (prev.includes(filePath)) {
-        return prev.filter((path: string) => path !== filePath);
+      // Check if the file is already selected
+      const isSelected = prev.some(path => arePathsEqual(path, normalizedPath));
+      
+      if (isSelected) {
+        // Remove the file from selected files
+        const newSelection = prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
+        return newSelection;
       } else {
-        return [...prev, filePath];
+        // Add the file to selected files
+        const newSelection = [...prev, normalizedPath];
+        return newSelection;
       }
     });
   };
 
   // Toggle folder selection (select/deselect all files in folder)
   const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
+    // Normalize the folder path
+    const normalizedFolderPath = normalizePath(folderPath);
+    
     const filesInFolder = allFiles.filter(
       (file: FileData) =>
-        file.path.startsWith(folderPath) && !file.isBinary && !file.isSkipped
+        normalizePath(file.path).startsWith(normalizedFolderPath) && 
+        !file.isBinary && 
+        !file.isSkipped,
+
     );
 
     if (isSelected) {
       // Add all files from this folder that aren't already selected
-      const filePaths = filesInFolder.map((file: FileData) => file.path);
+      const filePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
+      
       setSelectedFiles((prev: string[]) => {
         const newSelection = [...prev];
         filePaths.forEach((path: string) => {
-          if (!newSelection.includes(path)) {
+          if (!newSelection.some(p => arePathsEqual(p, path))) {
             newSelection.push(path);
           }
         });
@@ -291,12 +308,14 @@ const App = () => {
       });
     } else {
       // Remove all files from this folder
-      setSelectedFiles((prev: string[]) =>
-        prev.filter(
+      setSelectedFiles((prev: string[]) => {
+        const newSelection = prev.filter(
           (path: string) =>
-            !filesInFolder.some((file: FileData) => file.path === path)
-        )
-      );
+
+            !filesInFolder.some((file: FileData) => arePathsEqual(normalizePath(file.path), path)),
+        );
+        return newSelection;
+      });
     }
   };
 

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 // Add handling for the 'ignore' module
 let ignore;
@@ -17,6 +18,22 @@ try {
     },
   };
   console.log("Using fallback for ignore module");
+}
+
+/**
+ * Normalize file paths to use forward slashes regardless of OS
+ * This ensures consistent path formatting between main and renderer processes
+ */
+function normalizePath(filePath) {
+  if (!filePath) return filePath;
+  return filePath.replace(/\\/g, '/');
+}
+
+/**
+ * Get the platform-specific path separator
+ */
+function getPathSeparator() {
+  return os.platform() === 'win32' ? '\\' : '/';
 }
 
 // Initialize tokenizer with better error handling
@@ -369,6 +386,8 @@ function readFilesRecursively(dir, rootDir, ignoreFilter) {
 ipcMain.on("request-file-list", (event, folderPath) => {
   try {
     console.log("Processing file list for folder:", folderPath);
+    console.log("OS platform:", os.platform());
+    console.log("Path separator:", getPathSeparator());
 
     // Send initial progress update
     event.sender.send("file-processing-status", {
@@ -379,6 +398,7 @@ ipcMain.on("request-file-list", (event, folderPath) => {
     // Process files in chunks to avoid blocking the UI
     const processFiles = () => {
       const files = readFilesRecursively(folderPath, folderPath);
+      console.log(`Found ${files.length} files in ${folderPath}`);
 
       // Update with processing complete status
       event.sender.send("file-processing-status", {
@@ -388,10 +408,13 @@ ipcMain.on("request-file-list", (event, folderPath) => {
 
       // Process the files to ensure they're serializable
       const serializableFiles = files.map((file) => {
+        // Normalize the path to use forward slashes consistently
+        const normalizedPath = normalizePath(file.path);
+        
         // Create a clean file object
         return {
           name: file.name ? String(file.name) : "",
-          path: file.path ? String(file.path) : "",
+          path: normalizedPath, // Use normalized path
           tokenCount: typeof file.tokenCount === "number" ? file.tokenCount : 0,
           size: typeof file.size === "number" ? file.size : 0,
           content: file.isBinary
@@ -403,12 +426,20 @@ ipcMain.on("request-file-list", (event, folderPath) => {
           isSkipped: Boolean(file.isSkipped),
           error: file.error ? String(file.error) : null,
           fileType: file.fileType ? String(file.fileType) : null,
-          excludedByDefault: shouldExcludeByDefault(file.path, folderPath), // Add new flag to identify excluded files
+          excludedByDefault: shouldExcludeByDefault(normalizedPath, normalizePath(folderPath)), // Also normalize here
         };
       });
 
       try {
         console.log(`Sending ${serializableFiles.length} files to renderer`);
+        // Log a sample of paths to check normalization
+        if (serializableFiles.length > 0) {
+          console.log("Sample file paths (first 3):");
+          serializableFiles.slice(0, 3).forEach(file => {
+            console.log(`- ${file.path}`);
+          });
+        }
+        
         event.sender.send("file-list-data", serializableFiles);
       } catch (sendErr) {
         console.error("Error sending file data:", sendErr);
@@ -431,12 +462,11 @@ ipcMain.on("request-file-list", (event, folderPath) => {
     // Use setTimeout to allow UI to update before processing starts
     setTimeout(processFiles, 100);
   } catch (err) {
-    console.error("Error reading directory:", err);
+    console.error("Error processing file list:", err);
     event.sender.send("file-processing-status", {
       status: "error",
-      message: "Error processing directory",
+      message: `Error: ${err.message}`,
     });
-    event.sender.send("file-list-data", []);
   }
 });
 
@@ -449,3 +479,8 @@ function shouldExcludeByDefault(filePath, rootDir) {
   const ig = ignore().add(excludedFiles);
   return ig.ignores(relativePathNormalized);
 }
+
+// Add a debug handler for file selection
+ipcMain.on("debug-file-selection", (event, data) => {
+  console.log("DEBUG - File Selection:", data);
+});

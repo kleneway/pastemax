@@ -93,16 +93,20 @@ const Sidebar = ({
             if (!part) continue;
 
             currentPath = currentPath ? `${currentPath}/${part}` : part;
-            const fullPath = selectedFolder
-              ? `${selectedFolder}/${currentPath}`
-              : currentPath;
+            
+            // Use the original file.path for files to avoid path duplication
+            const fullPath = i === parts.length - 1 
+              ? file.path // For files, use the original path
+              : (selectedFolder 
+                  ? `${selectedFolder}/${currentPath}` 
+                  : currentPath); // For directories
 
             if (i === parts.length - 1) {
               // This is a file
               current[part] = {
                 id: `node-${fullPath}`,
                 name: part,
-                path: fullPath,
+                path: file.path, // Use the original file path
                 type: "file",
                 level: i,
                 fileData: file,

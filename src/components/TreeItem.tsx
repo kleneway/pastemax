@@ -1,11 +1,10 @@
 import React, {
   useRef,
   useEffect,
-  MouseEvent as ReactMouseEvent,
-  ChangeEvent as ReactChangeEvent,
 } from "react";
 import { TreeItemProps, TreeNode } from "../types/FileTypes";
 import { ChevronRight, File, Folder } from "lucide-react";
+import { arePathsEqual } from "../utils/pathUtils";
 
 const TreeItem = ({
   node,
@@ -17,20 +16,26 @@ const TreeItem = ({
   const { id, name, path, type, level, isExpanded, fileData } = node;
   const checkboxRef = useRef<HTMLInputElement>(null);
 
-  const isSelected = type === "file" && selectedFiles.includes(path);
+  const isSelected = type === "file" && selectedFiles.some(selectedPath => 
+    arePathsEqual(selectedPath, path)
+  );
 
   // For directories, check if all children are selected
   const isDirectorySelected =
     type === "directory" && node.children
       ? node.children.every((child: TreeNode) => {
           if (child.type === "file") {
-            return selectedFiles.includes(child.path);
+            return selectedFiles.some(selectedPath => 
+              arePathsEqual(selectedPath, child.path)
+            );
           } else if (child.type === "directory" && child.children) {
             // Check recursively if this directory's children are all selected
             return child.children.every((grandchild: TreeNode) => {
               return (
                 grandchild.type === "file" &&
-                selectedFiles.includes(grandchild.path)
+                selectedFiles.some(selectedPath => 
+                  arePathsEqual(selectedPath, grandchild.path)
+                )
               );
             });
           }
@@ -43,12 +48,16 @@ const TreeItem = ({
     type === "directory" && node.children
       ? node.children.some((child: TreeNode) => {
           if (child.type === "file") {
-            return selectedFiles.includes(child.path);
+            return selectedFiles.some(selectedPath => 
+              arePathsEqual(selectedPath, child.path)
+            );
           } else if (child.type === "directory" && child.children) {
             return child.children.some((grandchild: TreeNode) => {
               return (
                 grandchild.type === "file" &&
-                selectedFiles.includes(grandchild.path)
+                selectedFiles.some(selectedPath => 
+                  arePathsEqual(selectedPath, grandchild.path)
+                )
               );
             });
           }
@@ -63,12 +72,12 @@ const TreeItem = ({
     }
   }, [isDirectoryPartiallySelected]);
 
-  const handleToggle = (e: ReactMouseEvent<HTMLDivElement>) => {
+  const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     toggleExpanded(id);
   };
 
-  const handleItemClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+  const handleItemClick = (e: React.MouseEvent) => {
     if (type === "directory") {
       toggleExpanded(id);
     } else if (type === "file" && !isDisabled) {
@@ -76,7 +85,7 @@ const TreeItem = ({
     }
   };
 
-  const handleCheckboxChange = (e: ReactChangeEvent<HTMLInputElement>) => {
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
     if (type === "file") {
       toggleFileSelection(path);
