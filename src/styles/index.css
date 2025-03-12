@@ -1,8 +1,8 @@
 :root {
   --background-primary: #ffffff;
   --background-secondary: #f8f8f8;
-  --background-selected: rgba(0,0,0,0.06);
-  --accent-blue: #0E639C;
+  --background-selected: rgba(0, 0, 0, 0.06);
+  --accent-blue: #0e639c;
   --border-color: #e0e0e0;
   --hover-color: #f5f5f5;
   --text-primary: #000000;
@@ -17,20 +17,20 @@
 }
 
 .dark-mode {
-  --background-primary: #1E1E1E;
+  --background-primary: #1e1e1e;
   --background-secondary: #252526;
-  --background-selected: #2A2D2E;
-  --accent-blue: #0E639C;
-  --border-color: #3E3E42;
+  --background-selected: #2a2d2e;
+  --accent-blue: #0e639c;
+  --border-color: #3e3e42;
   --hover-color: #333333;
-  --text-primary: #E8E8E8;
-  --text-secondary: #BBBBBB;
+  --text-primary: #e8e8e8;
+  --text-secondary: #bbbbbb;
   --text-disabled: #808080;
-  --icon-color: #CCCCCC;
+  --icon-color: #cccccc;
   --success-color: #2ecc71;
   --warning-color: #f39c12;
   --error-color: #e74c3c;
-  --primary-button-background: #0E639C;
+  --primary-button-background: #0e639c;
   --primary-button-text: #ffffff;
 }
 
@@ -863,4 +863,28 @@ input[type="text"].search-input:focus {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.user-instructions-container {
+  padding: 16px 10px 10px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.user-instructions textarea {
+  color: var(--text-primary);
+  line-height: 1.5;
+  font-size: 1rem;
+  border-top: --border-color;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.user-instructions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0px 4px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--background-primary);
 }

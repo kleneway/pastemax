@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
+import UserInstructions from "./components/UserInstructions";
 import { FileData } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
@@ -16,7 +17,7 @@ declare global {
         on: (channel: string, func: (...args: any[]) => void) => void;
         removeListener: (
           channel: string,
-          func: (...args: any[]) => void,
+          func: (...args: any[]) => void
         ) => void;
       };
     };
@@ -44,28 +45,28 @@ const App = () => {
   );
   const [allFiles, setAllFiles] = useState([] as FileData[]);
   const [selectedFiles, setSelectedFiles] = useState(
-    savedFiles ? JSON.parse(savedFiles) : [] as string[]
+    savedFiles ? JSON.parse(savedFiles) : ([] as string[])
   );
-  const [sortOrder, setSortOrder] = useState(
-    savedSortOrder || "tokens-desc"
-  );
+  const [sortOrder, setSortOrder] = useState(savedSortOrder || "tokens-desc");
   const [searchTerm, setSearchTerm] = useState(savedSearchTerm || "");
   const [expandedNodes, setExpandedNodes] = useState(
     {} as Record<string, boolean>
   );
   const [displayedFiles, setDisplayedFiles] = useState([] as FileData[]);
-  const [processingStatus, setProcessingStatus] = useState(
-    { status: "idle", message: "" } as {
-      status: "idle" | "processing" | "complete" | "error";
-      message: string;
-    }
-  );
+  const [processingStatus, setProcessingStatus] = useState({
+    status: "idle",
+    message: "",
+  } as {
+    status: "idle" | "processing" | "complete" | "error";
+    message: string;
+  });
   const [includeFileTree, setIncludeFileTree] = useState(false);
-  
-
 
   // State for sort dropdown
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
+  // NEW: State for user instructions
+  const [userInstructions, setUserInstructions] = useState("");
 
   // Check if we're running in Electron or browser environment
   const isElectron = window.electron !== undefined;
@@ -73,7 +74,7 @@ const App = () => {
   // Load expanded nodes state from localStorage
   useEffect(() => {
     const savedExpandedNodes = localStorage.getItem(
-      STORAGE_KEYS.EXPANDED_NODES,
+      STORAGE_KEYS.EXPANDED_NODES
     );
     if (savedExpandedNodes) {
       try {
@@ -97,7 +98,7 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEYS.SELECTED_FILES,
-      JSON.stringify(selectedFiles),
+      JSON.stringify(selectedFiles)
     );
   }, [selectedFiles]);
 
@@ -114,23 +115,21 @@ const App = () => {
   // Load initial data from saved folder
   useEffect(() => {
     if (!isElectron || !selectedFolder) return;
-  
+
     // Use a flag in sessionStorage to ensure we only load data once per session
     const hasLoadedInitialData = sessionStorage.getItem("hasLoadedInitialData");
     if (hasLoadedInitialData === "true") return;
-  
+
     console.log("Loading saved folder on startup:", selectedFolder);
     setProcessingStatus({
       status: "processing",
       message: "Loading files from previously selected folder...",
     });
     window.electron.ipcRenderer.send("request-file-list", selectedFolder);
-  
+
     // Mark that we've loaded the initial data
     sessionStorage.setItem("hasLoadedInitialData", "true");
   }, [isElectron, selectedFolder]);
-  
-
 
   // Listen for folder selection from main process
   useEffect(() => {
@@ -175,7 +174,7 @@ const App = () => {
       const selectablePaths = files
         .filter(
           (file: FileData) =>
-            !file.isBinary && !file.isSkipped && !file.excludedByDefault, // Respect the excludedByDefault flag
+            !file.isBinary && !file.isSkipped && !file.excludedByDefault // Respect the excludedByDefault flag
         )
         .map((file: FileData) => file.path);
 
@@ -194,21 +193,21 @@ const App = () => {
     window.electron.ipcRenderer.on("file-list-data", handleFileListData);
     window.electron.ipcRenderer.on(
       "file-processing-status",
-      handleProcessingStatus,
+      handleProcessingStatus
     );
 
     return () => {
       window.electron.ipcRenderer.removeListener(
         "folder-selected",
-        handleFolderSelected,
+        handleFolderSelected
       );
       window.electron.ipcRenderer.removeListener(
         "file-list-data",
-        handleFileListData,
+        handleFileListData
       );
       window.electron.ipcRenderer.removeListener(
         "file-processing-status",
-        handleProcessingStatus,
+        handleProcessingStatus
       );
     };
   }, [isElectron, sortOrder, searchTerm]);
@@ -227,7 +226,7 @@ const App = () => {
   const applyFiltersAndSort = (
     files: FileData[],
     sort: string,
-    filter: string,
+    filter: string
   ) => {
     let filtered = files;
 
@@ -237,7 +236,7 @@ const App = () => {
       filtered = files.filter(
         (file) =>
           file.name.toLowerCase().includes(lowerFilter) ||
-          file.path.toLowerCase().includes(lowerFilter),
+          file.path.toLowerCase().includes(lowerFilter)
       );
     }
 
@@ -291,6 +290,7 @@ const App = () => {
         normalizePath(file.path).startsWith(normalizedFolderPath) && 
         !file.isBinary && 
         !file.isSkipped,
+
     );
 
     if (isSelected) {
@@ -311,6 +311,7 @@ const App = () => {
       setSelectedFiles((prev: string[]) => {
         const newSelection = prev.filter(
           (path: string) =>
+
             !filesInFolder.some((file: FileData) => arePathsEqual(normalizePath(file.path), path)),
         );
         return newSelection;
@@ -344,7 +345,8 @@ const App = () => {
     }, 0);
   };
 
-  // Concatenate selected files content for copying
+  // Concatenate selected files content for copying,
+  // and add user instructions (wrapped in tags) at the bottom if provided.
   const getSelectedFilesContent = () => {
     // Sort selected files according to current sort order
     const [sortKey, sortDir] = sortOrder.split("-");
@@ -369,19 +371,23 @@ const App = () => {
     }
 
     let concatenatedString = "";
-    
+
     // Add ASCII file tree if enabled
     if (includeFileTree && selectedFolder) {
       const asciiTree = generateAsciiFileTree(sortedSelected, selectedFolder);
       concatenatedString += `<file_map>\n${selectedFolder}\n${asciiTree}\n</file_map>\n\n`;
     }
-    
+
     sortedSelected.forEach((file: FileData) => {
       concatenatedString += `\n\n// ---- File: ${file.name} ----\n\n`;
       concatenatedString += file.content;
     });
 
-    return concatenatedString;
+    // Wrap user instructions if any and add to the bottom
+    const userInstructionsBlock = userInstructions.trim()
+      ? `\n<user_instructions>\n${userInstructions}\n</user_instructions>\n\n`
+      : "";
+    return concatenatedString + userInstructionsBlock;
   };
 
   // Handle select all files
@@ -405,7 +411,7 @@ const App = () => {
   const deselectAllFiles = () => {
     const displayedPaths = displayedFiles.map((file: FileData) => file.path);
     setSelectedFiles((prev: string[]) =>
-      prev.filter((path: string) => !displayedPaths.includes(path)),
+      prev.filter((path: string) => !displayedPaths.includes(path))
     );
   };
 
@@ -428,7 +434,7 @@ const App = () => {
       // Save to localStorage
       localStorage.setItem(
         STORAGE_KEYS.EXPANDED_NODES,
-        JSON.stringify(newState),
+        JSON.stringify(newState)
       );
 
       return newState;
@@ -528,9 +534,33 @@ const App = () => {
                 toggleFileSelection={toggleFileSelection}
               />
 
+              {/* Render the user instructions textbox */}
+              <div className="user-instructions-container">
+                <UserInstructions
+                  instructions={userInstructions}
+                  setInstructions={setUserInstructions}
+                />
+              </div>
+
               <div className="copy-button-container">
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%", maxWidth: "400px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "12px",
+                    width: "100%",
+                    maxWidth: "400px",
+                  }}
+                >
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: "pointer",
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={includeFileTree}
@@ -542,7 +572,9 @@ const App = () => {
                     text={getSelectedFilesContent()}
                     className="primary full-width"
                   >
-                    <span>COPY ALL SELECTED ({selectedFiles.length} files)</span>
+                    <span>
+                      COPY ALL SELECTED ({selectedFiles.length} files)
+                    </span>
                   </CopyButton>
                 </div>
               </div>
