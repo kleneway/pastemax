@@ -46,8 +46,18 @@ npm install
 
 ```
 npm run build-electron
-npm run dist
+npm run package
 ```
+
+**Note for Windows users**: If you encounter issues with `npm run package`, you can try the platform-specific command:
+
+```
+npm run package:win
+```
+
+After successful build, you'll find the executable files in the `release-builds` directory:
+- `PasteMax Setup 1.0.0.exe` - Installer version
+- `PasteMax 1.0.0.exe` - Portable version
 
 ## Development
 
@@ -86,8 +96,13 @@ To build the application for production:
 npm run build-electron
 
 # Create platform-specific distributables
-npm run dist
+npm run package
 ```
+
+Platform-specific build commands:
+- Windows: `npm run package:win`
+- macOS: `npm run package:mac`
+- Linux: `npm run package:linux`
 
 ## Project Structure
 
@@ -137,10 +152,21 @@ This is caused by dependencies not being properly included in the package. To fi
 2. Rebuild the application:
 
    ```
-   npm run build-electron && npm run dist
+   npm run build-electron && npm run package
    ```
 
 3. Install the new version
+
+### Build Command Issues
+
+If you encounter issues with the standard `npm run package` command:
+
+1. Try using the platform-specific build command:
+   - Windows: `npm run package:win`
+   - macOS: `npm run package:mac`
+   - Linux: `npm run package:linux`
+
+2. Check the `release-builds` directory for output files after building
 
 ### Other Issues
 
