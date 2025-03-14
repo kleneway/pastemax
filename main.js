@@ -234,12 +234,13 @@ function isBinaryFile(filePath) {
 function countTokens(text) {
   // Simple fallback implementation if encoder fails
   if (!encoder) {
-    // Very rough estimate: ~4 characters per token on average
     return Math.ceil(text.length / 4);
   }
 
   try {
-    const tokens = encoder.encode(text);
+    // Remove any special tokens that might cause issues
+    const cleanText = text.replace(/<\|endoftext\|>/g, '');
+    const tokens = encoder.encode(cleanText);
     return tokens.length;
   } catch (err) {
     console.error("Error counting tokens:", err);
@@ -248,129 +249,163 @@ function countTokens(text) {
   }
 }
 
-// Function to recursively read files from a directory
-function readFilesRecursively(dir, rootDir, ignoreFilter) {
+/**
+ * Recursively reads files from a directory with chunked processing and cancellation support.
+ * Implements several performance and safety features:
+ * - Processes files in small chunks to maintain UI responsiveness
+ * - Supports immediate cancellation at any point
+ * - Handles binary files and large files appropriately
+ * - Respects .gitignore and custom exclusion patterns
+ * - Provides progress updates to the UI
+ * 
+ * @param {string} dir - The directory to process
+ * @param {string} rootDir - The root directory (used for relative path calculations)
+ * @param {object} ignoreFilter - The ignore filter instance for file exclusions
+ * @param {BrowserWindow} window - The Electron window instance for sending updates
+ * @returns {Promise<Array>} Array of processed file objects
+ */
+async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
+  if (!isLoadingDirectory) return [];
+  
   rootDir = rootDir || dir;
   ignoreFilter = ignoreFilter || loadGitignore(rootDir);
 
   let results = [];
+  let processedFiles = 0;
+  const CHUNK_SIZE = 20;
 
   try {
-    const dirents = fs.readdirSync(dir, { withFileTypes: true });
+    const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    if (!isLoadingDirectory) return results; // Check after each async operation
 
-    // Process directories first, then files
-    const directories = [];
-    const files = [];
+    const directories = dirents.filter(dirent => dirent.isDirectory());
+    const files = dirents.filter(dirent => dirent.isFile());
 
-    dirents.forEach((dirent) => {
+    // Process directories first
+    for (const dirent of directories) {
+      if (!isLoadingDirectory) return results;
+
       const fullPath = path.join(dir, dirent.name);
       const relativePath = path.relative(rootDir, fullPath);
 
-      // Skip if the path is ignored
-      if (ignoreFilter.ignores(relativePath)) {
-        return;
+      if (!ignoreFilter.ignores(relativePath)) {
+        const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window);
+        if (!isLoadingDirectory) return results;
+        results = results.concat(subResults);
       }
 
-      if (dirent.isDirectory()) {
-        directories.push(dirent);
-      } else if (dirent.isFile()) {
-        files.push(dirent);
-      }
-    });
+      window.webContents.send("file-processing-status", {
+        status: "processing",
+        message: `Scanning directories... (Press ESC to cancel)`,
+      });
+    }
 
-    // Process directories first
-    directories.forEach((dirent) => {
-      const fullPath = path.join(dir, dirent.name);
-      // Recursively read subdirectory
-      results = results.concat(
-        readFilesRecursively(fullPath, rootDir, ignoreFilter),
-      );
-    });
+    // Process files in chunks
+    for (let i = 0; i < files.length; i += CHUNK_SIZE) {
+      if (!isLoadingDirectory) return results;
 
-    // Then process files
-    files.forEach((dirent) => {
-      const fullPath = path.join(dir, dirent.name);
-      try {
-        // Get file stats for size
-        const stats = fs.statSync(fullPath);
-        const fileSize = stats.size;
+      const chunk = files.slice(i, i + CHUNK_SIZE);
+      
+      const chunkPromises = chunk.map(async (dirent) => {
+        if (!isLoadingDirectory) return null;  // Check cancellation for each file
 
-        // Skip files that are too large
-        if (fileSize > MAX_FILE_SIZE) {
-          results.push({
-            name: dirent.name,
-            path: fullPath,
-            tokenCount: 0,
-            size: fileSize,
-            content: "",
-            isBinary: false,
-            isSkipped: true,
-            error: "File too large to process",
-          });
-          return;
+        const fullPath = path.join(dir, dirent.name);
+        const relativePath = path.relative(rootDir, fullPath);
+
+        if (ignoreFilter.ignores(relativePath)) {
+          return null;
         }
 
-        // Check if the file is binary
-        const isBinary = isBinaryFile(fullPath);
+        try {
+          const stats = await fs.promises.stat(fullPath);
+          if (!isLoadingDirectory) return null;  // Check after each async operation
+          
+          if (stats.size > MAX_FILE_SIZE) {
+            return {
+              name: dirent.name,
+              path: fullPath,
+              tokenCount: 0,
+              size: stats.size,
+              content: "",
+              isBinary: false,
+              isSkipped: true,
+              error: "File too large to process"
+            };
+          }
 
-        if (isBinary) {
-          // Skip token counting for binary files
-          results.push({
-            name: dirent.name,
-            path: fullPath,
-            tokenCount: 0,
-            size: fileSize,
-            content: "",
-            isBinary: true,
-            isSkipped: false,
-            fileType: path.extname(fullPath).substring(1).toUpperCase(),
-          });
-        } else {
-          // Read file content
-          const fileContent = fs.readFileSync(fullPath, "utf8");
+          if (isBinaryFile(fullPath)) {
+            return {
+              name: dirent.name,
+              path: fullPath,
+              tokenCount: 0,
+              size: stats.size,
+              content: "",
+              isBinary: true,
+              isSkipped: false,
+              fileType: path.extname(fullPath).substring(1).toUpperCase()
+            };
+          }
 
-          // Calculate token count
-          const tokenCount = countTokens(fileContent);
-
-          // Add file info with content and token count
-          results.push({
+          const fileContent = await fs.promises.readFile(fullPath, "utf8");
+          if (!isLoadingDirectory) return null;  // Check after file read
+          
+          return {
             name: dirent.name,
             path: fullPath,
             content: fileContent,
-            tokenCount: tokenCount,
-            size: fileSize,
+            tokenCount: countTokens(fileContent),
+            size: stats.size,
             isBinary: false,
-            isSkipped: false,
-          });
+            isSkipped: false
+          };
+        } catch (err) {
+          console.error(`Error reading file ${fullPath}:`, err);
+          return {
+            name: dirent.name,
+            path: fullPath,
+            tokenCount: 0,
+            size: 0,
+            isBinary: false,
+            isSkipped: true,
+            error: "Could not read file"
+          };
         }
-      } catch (err) {
-        console.error(`Error reading file ${fullPath}:`, err);
-        results.push({
-          name: dirent.name,
-          path: fullPath,
-          tokenCount: 0,
-          size: 0,
-          isBinary: false,
-          isSkipped: true,
-          error: "Could not read file",
-        });
-      }
-    });
+      });
+
+      const chunkResults = await Promise.all(chunkPromises);
+      if (!isLoadingDirectory) return results;  // Check after chunk completion
+      
+      results = results.concat(chunkResults.filter(result => result !== null));
+      processedFiles += chunk.length;
+      
+      window.webContents.send("file-processing-status", {
+        status: "processing",
+        message: `Processing files... ${processedFiles}/${files.length} (Press ESC to cancel)`,
+      });
+    }
   } catch (err) {
     console.error(`Error reading directory ${dir}:`, err);
+    if (err.code === 'EPERM' || err.code === 'EACCES') {
+      console.log(`Skipping inaccessible directory: ${dir}`);
+      return results;
+    }
   }
 
   return results;
 }
 
-// Handle request for file list
-ipcMain.on("request-file-list", (event, folderPath) => {
-  try {
-    console.log("Processing file list for folder:", folderPath);
-    console.log("OS platform:", os.platform());
-    console.log("Path separator:", path.sep);
+// Modify the request-file-list handler to use async/await
+ipcMain.on("request-file-list", async (event, folderPath) => {
+  // Prevent processing if already loading
+  if (isLoadingDirectory) {
+    console.log("Already processing a directory, cancelling previous operation");
+    cancelDirectoryLoading(BrowserWindow.fromWebContents(event.sender));
+    // Wait a bit before starting new operation
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 
-    // Set the loading flag
+  try {
+    // Set the loading flag first to prevent race conditions
     isLoadingDirectory = true;
 
     // Set up the timeout for directory loading
@@ -382,46 +417,44 @@ ipcMain.on("request-file-list", (event, folderPath) => {
       message: "Scanning directory structure... (Press ESC to cancel)",
     });
 
-    // Process files in chunks to avoid blocking the UI
-    const processFiles = () => {
-      if (!isLoadingDirectory) {
-        // Loading was cancelled
-        return;
-      }
-
-      const files = readFilesRecursively(folderPath, folderPath);
+    // Process files with async/await
+    const files = await readFilesRecursively(folderPath, folderPath, null, BrowserWindow.fromWebContents(event.sender));
     
-      // Clear the timeout and loading flag
-      if (loadingTimeoutId) {
-        clearTimeout(loadingTimeoutId);
-        loadingTimeoutId = null;
-      }
-      isLoadingDirectory = false;
+    // If loading was cancelled, return early
+    if (!isLoadingDirectory) {
+      return;
+    }
 
-      console.log(`Found ${files.length} files in ${folderPath}`);
+    // Clear the timeout and loading flag
+    if (loadingTimeoutId) {
+      clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
+    isLoadingDirectory = false;
 
-      // Update with processing complete status
-      event.sender.send("file-processing-status", {
-        status: "complete",
-        message: `Found ${files.length} files`,
-      });
+    // Update with processing complete status
+    event.sender.send("file-processing-status", {
+      status: "complete",
+      message: `Found ${files.length} files`,
+    });
 
-      // Process the files to ensure they're serializable
-      const serializedFiles = files.map(file => ({
-        path: file.path,
-        relativePath: file.relativePath,
-        name: file.name,
-        size: file.size,
-        isDirectory: file.isDirectory,
-        extension: path.extname(file.name).toLowerCase(),
-        excluded: shouldExcludeFile(file.relativePath),
-      }));
+    // Process the files to ensure they're serializable
+    const serializedFiles = files.map(file => ({
+      path: file.path,
+      relativePath: path.relative(folderPath, file.path),
+      name: file.name,
+      size: file.size,
+      isDirectory: file.isDirectory,
+      extension: path.extname(file.name).toLowerCase(),
+      excluded: shouldExcludeByDefault(file.path, folderPath),
+      content: file.content,
+      tokenCount: file.tokenCount,
+      isBinary: file.isBinary,
+      isSkipped: file.isSkipped,
+      error: file.error,
+    }));
 
-      event.sender.send("file-list-data", serializedFiles);
-    };
-
-    // Use setTimeout to allow UI to update before processing starts
-    setTimeout(processFiles, 100);
+    event.sender.send("file-list-data", serializedFiles);
   } catch (err) {
     console.error("Error processing file list:", err);
     isLoadingDirectory = false;
@@ -443,7 +476,14 @@ ipcMain.on("cancel-directory-loading", (event) => {
   cancelDirectoryLoading(BrowserWindow.fromWebContents(event.sender));
 });
 
-// Check if a file should be excluded by default, using glob matching
+/**
+ * Determines if a file should be excluded based on gitignore patterns and default rules.
+ * Normalizes paths for consistent cross-platform behavior.
+ * 
+ * @param {string} filePath - The full path of the file to check
+ * @param {string} rootDir - The root directory for relative path calculation
+ * @returns {boolean} True if the file should be excluded
+ */
 function shouldExcludeByDefault(filePath, rootDir) {
   const relativePath = path.relative(rootDir, filePath);
   const relativePathNormalized = relativePath.replace(/\\/g, "/"); // Normalize for consistent pattern matching
@@ -458,9 +498,19 @@ ipcMain.on("debug-file-selection", (event, data) => {
   console.log("DEBUG - File Selection:", data);
 });
 
-// Function to cancel directory loading
+/**
+ * Handles the cancellation of directory loading operations.
+ * Ensures clean cancellation by:
+ * - Clearing all timeouts
+ * - Resetting loading flags
+ * - Notifying the UI immediately
+ * 
+ * @param {BrowserWindow} window - The Electron window instance to send updates to
+ */
 function cancelDirectoryLoading(window) {
-  console.log("Cancelling directory loading process");
+  if (!isLoadingDirectory) return;
+  
+  console.log("Cancelling directory loading process immediately");
   isLoadingDirectory = false;
   
   if (loadingTimeoutId) {
@@ -468,13 +518,20 @@ function cancelDirectoryLoading(window) {
     loadingTimeoutId = null;
   }
   
+  // Send cancellation message immediately
   window.webContents.send("file-processing-status", {
-    status: "error",
-    message: "Directory loading cancelled - try selecting a smaller directory",
+    status: "cancelled",
+    message: "Directory loading cancelled",
   });
 }
 
-// Handler for directory loading timeout
+/**
+ * Sets up a safety timeout for directory loading operations.
+ * Prevents infinite loading by automatically cancelling after MAX_DIRECTORY_LOAD_TIME.
+ * 
+ * @param {BrowserWindow} window - The Electron window instance
+ * @param {string} folderPath - The path being processed (for logging)
+ */
 function setupDirectoryLoadingTimeout(window, folderPath) {
   // Clear any existing timeout
   if (loadingTimeoutId) {

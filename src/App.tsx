@@ -33,6 +33,13 @@ const STORAGE_KEYS = {
 };
 
 const App = (): JSX.Element => {
+  // Clear saved folder on startup (temporary, for testing)
+  useEffect(() => {
+    localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+    localStorage.removeItem("hasLoadedInitialData");
+    sessionStorage.removeItem("hasLoadedInitialData");
+  }, []);
+
   // Load initial state from localStorage if available
   const savedFolder = localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
   const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
@@ -148,6 +155,10 @@ const App = (): JSX.Element => {
 
   // Modify the existing useEffect for loading initial data
   useEffect(() => {
+    // Temporarily disable auto-loading to test our changes
+    return;
+    
+    /* Commented out for testing
     if (!isElectron || !selectedFolder || isSafeMode) return;
     
     // Use a flag in sessionStorage to ensure we only load data once per session
@@ -163,6 +174,7 @@ const App = (): JSX.Element => {
     
     // Mark that we've loaded the initial data
     sessionStorage.setItem("hasLoadedInitialData", "true");
+    */
   }, [isElectron, selectedFolder, isSafeMode]);
   
 
