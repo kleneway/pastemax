@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
@@ -32,7 +32,14 @@ const STORAGE_KEYS = {
   EXPANDED_NODES: "pastemax-expanded-nodes",
 };
 
-const App = () => {
+const App = (): JSX.Element => {
+  // Clear saved folder on startup (temporary, for testing)
+  useEffect(() => {
+    localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+    localStorage.removeItem("hasLoadedInitialData");
+    sessionStorage.removeItem("hasLoadedInitialData");
+  }, []);
+
   // Load initial state from localStorage if available
   const savedFolder = localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
   const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
@@ -69,6 +76,8 @@ const App = () => {
 
   // Check if we're running in Electron or browser environment
   const isElectron = window.electron !== undefined;
+
+  const [isSafeMode, setIsSafeMode] = useState(false);
 
   // Load expanded nodes state from localStorage
   useEffect(() => {
@@ -111,24 +120,62 @@ const App = () => {
     localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, searchTerm);
   }, [searchTerm]);
 
-  // Load initial data from saved folder
+  // Add a function to cancel directory loading
+  const cancelDirectoryLoading = useCallback(() => {
+    if (isElectron) {
+      window.electron.ipcRenderer.send("cancel-directory-loading");
+      setProcessingStatus({
+        status: "idle",
+        message: "Directory loading cancelled",
+      });
+    }
+  }, [isElectron]);
+
+  // Add this new useEffect for safe mode detection
   useEffect(() => {
-    if (!isElectron || !selectedFolder) return;
-  
+    if (!isElectron) return;
+    
+    const handleStartupMode = (mode: { safeMode: boolean }) => {
+      setIsSafeMode(mode.safeMode);
+    
+      // If we're in safe mode, don't auto-load the previously selected folder
+      if (mode.safeMode) {
+        console.log("Starting in safe mode - not loading saved folder");
+        localStorage.removeItem("hasLoadedInitialData");
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+      }
+    };
+    
+    window.electron.ipcRenderer.on("startup-mode", handleStartupMode);
+    
+    return () => {
+      window.electron.ipcRenderer.removeListener("startup-mode", handleStartupMode);
+    };
+  }, [isElectron]);
+
+  // Modify the existing useEffect for loading initial data
+  useEffect(() => {
+    // Temporarily disable auto-loading to test our changes
+    return;
+    
+    /* Commented out for testing
+    if (!isElectron || !selectedFolder || isSafeMode) return;
+    
     // Use a flag in sessionStorage to ensure we only load data once per session
     const hasLoadedInitialData = sessionStorage.getItem("hasLoadedInitialData");
     if (hasLoadedInitialData === "true") return;
-  
+    
     console.log("Loading saved folder on startup:", selectedFolder);
     setProcessingStatus({
       status: "processing",
-      message: "Loading files from previously selected folder...",
+      message: "Loading files from previously selected folder... (Press ESC to cancel)",
     });
     window.electron.ipcRenderer.send("request-file-list", selectedFolder);
-  
+    
     // Mark that we've loaded the initial data
     sessionStorage.setItem("hasLoadedInitialData", "true");
-  }, [isElectron, selectedFolder]);
+    */
+  }, [isElectron, selectedFolder, isSafeMode]);
   
 
 
@@ -436,7 +483,7 @@ const App = () => {
   };
 
   return (
-    <ThemeProvider>
+    <ThemeProvider children={
       <div className="app-container">
         <header className="header">
           <h1>PasteMax</h1>
@@ -463,6 +510,12 @@ const App = () => {
           <div className="processing-indicator">
             <div className="spinner"></div>
             <span>{processingStatus.message}</span>
+            <button
+              className="cancel-btn"
+              onClick={cancelDirectoryLoading}
+            >
+              Cancel
+            </button>
           </div>
         )}
 
@@ -550,7 +603,7 @@ const App = () => {
           </div>
         )}
       </div>
-    </ThemeProvider>
+    } />
   );
 };
 

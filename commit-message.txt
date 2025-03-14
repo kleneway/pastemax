@@ -1,0 +1,31 @@
+fix: Resolve directory loading performance issues
+
+This commit implements several critical improvements to handle large directories:
+
+- Implement asynchronous file processing with chunking
+- Add immediate cancellation support (ESC key/Cancel button)
+- Fix double cancellation issues
+- Improve error handling and progress feedback
+- Add comprehensive documentation
+
+Performance Improvements:
+- Process files in chunks of 20 for better responsiveness
+- Implement proper async/await patterns
+- Optimize memory usage during file processing
+
+Bug Fixes:
+- Fix application freezing with large directories
+- Resolve token counting errors
+- Improve permission error handling
+
+Documentation:
+- Add JSDoc comments to key functions
+- Create CHANGELOG.md
+- Update version to 1.1.0
+
+Testing:
+- Verified with small and large directories
+- Tested cancellation functionality
+- Confirmed proper error handling
+
+Closes #[issue_number] 
