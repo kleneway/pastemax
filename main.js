@@ -1,7 +1,12 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+
+// Global variables for directory loading control
+let isLoadingDirectory = false;
+let loadingTimeoutId = null;
+const MAX_DIRECTORY_LOAD_TIME = 30000; // 30 seconds timeout
 
 // Add handling for the 'ignore' module
 let ignore;
@@ -120,6 +125,9 @@ const BINARY_EXTENSIONS = [
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 function createWindow() {
+  // Check if we're starting in safe mode (Shift key pressed)
+  const isSafeMode = process.argv.includes('--safe-mode');
+  
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -128,65 +136,38 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
       devTools: {
-        // Add these settings to prevent Autofill warnings
         isDevToolsExtension: false,
         htmlFullscreen: false,
       },
     },
   });
 
-  // In development, load from Vite dev server
-  // In production, load from built files
-  const isDev = process.env.NODE_ENV === "development";
-  if (isDev) {
-    // Use the URL provided by the dev script, or fall back to default
-    const startUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
-    // Wait a moment for dev server to be ready
-    setTimeout(() => {
-      // Clear any cached data to prevent redirection loops
-      mainWindow.webContents.session.clearCache().then(() => {
-        mainWindow.loadURL(startUrl);
-        // Open DevTools in development mode with options to reduce warnings
-        if (mainWindow.webContents.isDevToolsOpened()) {
-          mainWindow.webContents.closeDevTools();
-        }
-        mainWindow.webContents.openDevTools({ mode: "detach" });
-        console.log(`Loading from dev server at ${startUrl}`);
-      });
-    }, 1000);
+  // Pass the safe mode flag to the renderer
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.send('startup-mode', { 
+      safeMode: isSafeMode 
+    });
+  });
+
+  // Register the escape key to cancel directory loading
+  globalShortcut.register('Escape', () => {
+    if (isLoadingDirectory) {
+      cancelDirectoryLoading(mainWindow);
+    }
+  });
+
+  // Clean up shortcuts when window is closed
+  mainWindow.on('closed', () => {
+    globalShortcut.unregisterAll();
+  });
+
+  // Load the index.html file
+  if (process.env.NODE_ENV === "development") {
+    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.openDevTools();
   } else {
-    const indexPath = path.join(__dirname, "dist", "index.html");
-    console.log(`Loading from built files at ${indexPath}`);
-
-    // Use loadURL with file protocol for better path resolution
-    const indexUrl = `file://${indexPath}`;
-    mainWindow.loadURL(indexUrl);
+    mainWindow.loadFile(path.join(__dirname, "dist", "index.html"));
   }
-
-  // Add basic error handling for failed loads
-  mainWindow.webContents.on(
-    "did-fail-load",
-    (event, errorCode, errorDescription, validatedURL) => {
-      console.error(
-        `Failed to load the application: ${errorDescription} (${errorCode})`,
-      );
-      console.error(`Attempted to load URL: ${validatedURL}`);
-
-      if (isDev) {
-        const retryUrl =
-          process.env.ELECTRON_START_URL || "http://localhost:3000";
-        // Clear cache before retrying
-        mainWindow.webContents.session.clearCache().then(() => {
-          setTimeout(() => mainWindow.loadURL(retryUrl), 1000);
-        });
-      } else {
-        // Retry with explicit file URL
-        const indexPath = path.join(__dirname, "dist", "index.html");
-        const indexUrl = `file://${indexPath}`;
-        mainWindow.loadURL(indexUrl);
-      }
-    },
-  );
 }
 
 app.whenReady().then(() => {
@@ -382,22 +363,41 @@ function readFilesRecursively(dir, rootDir, ignoreFilter) {
   return results;
 }
 
-// Handle file list request
+// Handle request for file list
 ipcMain.on("request-file-list", (event, folderPath) => {
   try {
     console.log("Processing file list for folder:", folderPath);
     console.log("OS platform:", os.platform());
-    console.log("Path separator:", getPathSeparator());
+    console.log("Path separator:", path.sep);
+
+    // Set the loading flag
+    isLoadingDirectory = true;
+
+    // Set up the timeout for directory loading
+    setupDirectoryLoadingTimeout(BrowserWindow.fromWebContents(event.sender), folderPath);
 
     // Send initial progress update
     event.sender.send("file-processing-status", {
       status: "processing",
-      message: "Scanning directory structure...",
+      message: "Scanning directory structure... (Press ESC to cancel)",
     });
 
     // Process files in chunks to avoid blocking the UI
     const processFiles = () => {
+      if (!isLoadingDirectory) {
+        // Loading was cancelled
+        return;
+      }
+
       const files = readFilesRecursively(folderPath, folderPath);
+    
+      // Clear the timeout and loading flag
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+        loadingTimeoutId = null;
+      }
+      isLoadingDirectory = false;
+
       console.log(`Found ${files.length} files in ${folderPath}`);
 
       // Update with processing complete status
@@ -407,67 +407,40 @@ ipcMain.on("request-file-list", (event, folderPath) => {
       });
 
       // Process the files to ensure they're serializable
-      const serializableFiles = files.map((file) => {
-        // Normalize the path to use forward slashes consistently
-        const normalizedPath = normalizePath(file.path);
-        
-        // Create a clean file object
-        return {
-          name: file.name ? String(file.name) : "",
-          path: normalizedPath, // Use normalized path
-          tokenCount: typeof file.tokenCount === "number" ? file.tokenCount : 0,
-          size: typeof file.size === "number" ? file.size : 0,
-          content: file.isBinary
-            ? ""
-            : typeof file.content === "string"
-            ? file.content
-            : "",
-          isBinary: Boolean(file.isBinary),
-          isSkipped: Boolean(file.isSkipped),
-          error: file.error ? String(file.error) : null,
-          fileType: file.fileType ? String(file.fileType) : null,
-          excludedByDefault: shouldExcludeByDefault(normalizedPath, normalizePath(folderPath)), // Also normalize here
-        };
-      });
+      const serializedFiles = files.map(file => ({
+        path: file.path,
+        relativePath: file.relativePath,
+        name: file.name,
+        size: file.size,
+        isDirectory: file.isDirectory,
+        extension: path.extname(file.name).toLowerCase(),
+        excluded: shouldExcludeFile(file.relativePath),
+      }));
 
-      try {
-        console.log(`Sending ${serializableFiles.length} files to renderer`);
-        // Log a sample of paths to check normalization
-        if (serializableFiles.length > 0) {
-          console.log("Sample file paths (first 3):");
-          serializableFiles.slice(0, 3).forEach(file => {
-            console.log(`- ${file.path}`);
-          });
-        }
-        
-        event.sender.send("file-list-data", serializableFiles);
-      } catch (sendErr) {
-        console.error("Error sending file data:", sendErr);
-
-        // If sending fails, try again with minimal data
-        const minimalFiles = serializableFiles.map((file) => ({
-          name: file.name,
-          path: file.path,
-          tokenCount: file.tokenCount,
-          size: file.size,
-          isBinary: file.isBinary,
-          isSkipped: file.isSkipped,
-          excludedByDefault: file.excludedByDefault,
-        }));
-
-        event.sender.send("file-list-data", minimalFiles);
-      }
+      event.sender.send("file-list-data", serializedFiles);
     };
 
     // Use setTimeout to allow UI to update before processing starts
     setTimeout(processFiles, 100);
   } catch (err) {
     console.error("Error processing file list:", err);
+    isLoadingDirectory = false;
+  
+    if (loadingTimeoutId) {
+      clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
+  
     event.sender.send("file-processing-status", {
       status: "error",
       message: `Error: ${err.message}`,
     });
   }
+});
+
+// Add handler for cancel-directory-loading event
+ipcMain.on("cancel-directory-loading", (event) => {
+  cancelDirectoryLoading(BrowserWindow.fromWebContents(event.sender));
 });
 
 // Check if a file should be excluded by default, using glob matching
@@ -484,3 +457,33 @@ function shouldExcludeByDefault(filePath, rootDir) {
 ipcMain.on("debug-file-selection", (event, data) => {
   console.log("DEBUG - File Selection:", data);
 });
+
+// Function to cancel directory loading
+function cancelDirectoryLoading(window) {
+  console.log("Cancelling directory loading process");
+  isLoadingDirectory = false;
+  
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+  
+  window.webContents.send("file-processing-status", {
+    status: "error",
+    message: "Directory loading cancelled - try selecting a smaller directory",
+  });
+}
+
+// Handler for directory loading timeout
+function setupDirectoryLoadingTimeout(window, folderPath) {
+  // Clear any existing timeout
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+  }
+  
+  // Set a new timeout
+  loadingTimeoutId = setTimeout(() => {
+    console.log(`Directory loading timed out after ${MAX_DIRECTORY_LOAD_TIME / 1000} seconds: ${folderPath}`);
+    cancelDirectoryLoading(window);
+  }, MAX_DIRECTORY_LOAD_TIME);
+}
