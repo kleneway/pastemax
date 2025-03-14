@@ -6,7 +6,7 @@ const os = require("os");
 // Global variables for directory loading control
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
-const MAX_DIRECTORY_LOAD_TIME = 30000; // 30 seconds timeout
+const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
 
 // Add handling for the 'ignore' module
 let ignore;
