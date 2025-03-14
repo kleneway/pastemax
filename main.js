@@ -276,7 +276,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
 
   try {
     const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
-    if (!isLoadingDirectory) return results; // Check after each async operation
+    if (!isLoadingDirectory) return results;
 
     const directories = dirents.filter(dirent => dirent.isDirectory());
     const files = dirents.filter(dirent => dirent.isFile());
@@ -286,9 +286,17 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
       if (!isLoadingDirectory) return results;
 
       const fullPath = path.join(dir, dirent.name);
-      const relativePath = path.relative(rootDir, fullPath);
+      // Ensure path is relative to root and normalized
+      const relativePath = path.relative(rootDir, fullPath).split(path.sep).join('/');
 
-      if (!ignoreFilter.ignores(relativePath)) {
+      // Skip PasteMax app directories
+      if (fullPath.includes('.app') || fullPath === app.getAppPath()) {
+        console.log('Skipping app directory:', fullPath);
+        continue;
+      }
+
+      // Only check ignore patterns if the path is inside the root directory
+      if (!relativePath.startsWith('..') && !ignoreFilter.ignores(relativePath)) {
         const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window);
         if (!isLoadingDirectory) return results;
         results = results.concat(subResults);
@@ -307,10 +315,22 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
       const chunk = files.slice(i, i + CHUNK_SIZE);
       
       const chunkPromises = chunk.map(async (dirent) => {
-        if (!isLoadingDirectory) return null;  // Check cancellation for each file
+        if (!isLoadingDirectory) return null;
 
         const fullPath = path.join(dir, dirent.name);
-        const relativePath = path.relative(rootDir, fullPath);
+        // Ensure path is relative to root and normalized
+        const relativePath = path.relative(rootDir, fullPath).split(path.sep).join('/');
+
+        // Skip files in PasteMax app directories
+        if (fullPath.includes('.app') || fullPath === app.getAppPath()) {
+          console.log('Skipping app file:', fullPath);
+          return null;
+        }
+
+        // Only check ignore patterns if the path is inside the root directory
+        if (relativePath.startsWith('..')) {
+          return null;
+        }
 
         if (ignoreFilter.ignores(relativePath)) {
           return null;
@@ -318,12 +338,12 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
 
         try {
           const stats = await fs.promises.stat(fullPath);
-          if (!isLoadingDirectory) return null;  // Check after each async operation
+          if (!isLoadingDirectory) return null;
           
           if (stats.size > MAX_FILE_SIZE) {
             return {
               name: dirent.name,
-              path: fullPath,
+              path: relativePath,
               tokenCount: 0,
               size: stats.size,
               content: "",
@@ -336,7 +356,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
           if (isBinaryFile(fullPath)) {
             return {
               name: dirent.name,
-              path: fullPath,
+              path: relativePath,
               tokenCount: 0,
               size: stats.size,
               content: "",
@@ -347,11 +367,11 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
           }
 
           const fileContent = await fs.promises.readFile(fullPath, "utf8");
-          if (!isLoadingDirectory) return null;  // Check after file read
+          if (!isLoadingDirectory) return null;
           
           return {
             name: dirent.name,
-            path: fullPath,
+            path: relativePath,
             content: fileContent,
             tokenCount: countTokens(fileContent),
             size: stats.size,
@@ -362,7 +382,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
           console.error(`Error reading file ${fullPath}:`, err);
           return {
             name: dirent.name,
-            path: fullPath,
+            path: relativePath,
             tokenCount: 0,
             size: 0,
             isBinary: false,
@@ -373,7 +393,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
       });
 
       const chunkResults = await Promise.all(chunkPromises);
-      if (!isLoadingDirectory) return results;  // Check after chunk completion
+      if (!isLoadingDirectory) return results;
       
       results = results.concat(chunkResults.filter(result => result !== null));
       processedFiles += chunk.length;
@@ -485,12 +505,15 @@ ipcMain.on("cancel-directory-loading", (event) => {
  * @returns {boolean} True if the file should be excluded
  */
 function shouldExcludeByDefault(filePath, rootDir) {
-  const relativePath = path.relative(rootDir, filePath);
-  const relativePathNormalized = relativePath.replace(/\\/g, "/"); // Normalize for consistent pattern matching
+  const relativePath = path.relative(rootDir, filePath).split(path.sep).join('/');
+  
+  // Don't process paths outside the root directory
+  if (relativePath.startsWith('..')) {
+    return true;
+  }
 
-  // Use the ignore package to do glob pattern matching
   const ig = ignore().add(excludedFiles);
-  return ig.ignores(relativePathNormalized);
+  return ig.ignores(relativePath);
 }
 
 // Add a debug handler for file selection
