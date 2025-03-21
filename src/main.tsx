@@ -1,3 +1,7 @@
+/**
+ * Application entry point that sets up React with strict mode.
+ * This ensures better development-time checks and warnings.
+ */
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

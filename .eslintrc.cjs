@@ -15,6 +15,7 @@ module.exports = {
       { allowConstantExport: true },
     ],
     "@typescript-eslint/no-explicit-any": "off", // During development, allow 'any' type
+    "@typescript-eslint/no-var-requires": "off", // Hide error for require()
     "@typescript-eslint/no-unused-vars": "warn",
   },
   settings: {

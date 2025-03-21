@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
 import { FileData } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
-import { generateAsciiFileTree, normalizePath, arePathsEqual } from "./utils/pathUtils";
+
+/**
+ * Import path utilities for handling file paths across different operating systems.
+ * While not all utilities are used directly, they're kept for consistency and future use.
+ */
+import { generateAsciiFileTree, normalizePath, arePathsEqual, isSubPath, join } from "./utils/pathUtils";
 
 // Access the electron API from the window object
 declare global {
@@ -23,7 +28,10 @@ declare global {
   }
 }
 
-// Keys for localStorage
+/**
+ * Keys used for storing app state in localStorage.
+ * Keeping them in one place makes them easier to manage and update.
+ */
 const STORAGE_KEYS = {
   SELECTED_FOLDER: "pastemax-selected-folder",
   SELECTED_FILES: "pastemax-selected-files",
@@ -32,7 +40,21 @@ const STORAGE_KEYS = {
   EXPANDED_NODES: "pastemax-expanded-nodes",
 };
 
-const App = () => {
+/**
+ * The main App component that handles:
+ * - File selection and management
+ * - Folder navigation
+ * - File content copying
+ * - UI state management
+ */
+const App = (): JSX.Element => {
+  // Clear saved folder on startup (temporary, for testing)
+  useEffect(() => {
+    localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+    localStorage.removeItem("hasLoadedInitialData");
+    sessionStorage.removeItem("hasLoadedInitialData");
+  }, []);
+
   // Load initial state from localStorage if available
   const savedFolder = localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
   const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
@@ -69,6 +91,8 @@ const App = () => {
 
   // Check if we're running in Electron or browser environment
   const isElectron = window.electron !== undefined;
+
+  const [isSafeMode, setIsSafeMode] = useState(false);
 
   // Load expanded nodes state from localStorage
   useEffect(() => {
@@ -111,26 +135,58 @@ const App = () => {
     localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, searchTerm);
   }, [searchTerm]);
 
-  // Load initial data from saved folder
+  // Add a function to cancel directory loading
+  const cancelDirectoryLoading = useCallback(() => {
+    if (isElectron) {
+      window.electron.ipcRenderer.send("cancel-directory-loading");
+      setProcessingStatus({
+        status: "idle",
+        message: "Directory loading cancelled",
+      });
+    }
+  }, [isElectron]);
+
+  // Add this new useEffect for safe mode detection
   useEffect(() => {
-    if (!isElectron || !selectedFolder) return;
-  
+    if (!isElectron) return;
+    
+    const handleStartupMode = (mode: { safeMode: boolean }) => {
+      setIsSafeMode(mode.safeMode);
+    
+      // If we're in safe mode, don't auto-load the previously selected folder
+      if (mode.safeMode) {
+        console.log("Starting in safe mode - not loading saved folder");
+        localStorage.removeItem("hasLoadedInitialData");
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+      }
+    };
+    
+    window.electron.ipcRenderer.on("startup-mode", handleStartupMode);
+    
+    return () => {
+      window.electron.ipcRenderer.removeListener("startup-mode", handleStartupMode);
+    };
+  }, [isElectron]);
+
+  // Modify the existing useEffect for loading initial data
+  useEffect(() => {
+    if (!isElectron || !selectedFolder || isSafeMode) return;
+    
     // Use a flag in sessionStorage to ensure we only load data once per session
     const hasLoadedInitialData = sessionStorage.getItem("hasLoadedInitialData");
     if (hasLoadedInitialData === "true") return;
-  
+    
     console.log("Loading saved folder on startup:", selectedFolder);
     setProcessingStatus({
       status: "processing",
-      message: "Loading files from previously selected folder...",
+      message: "Loading files from previously selected folder... (Press ESC to cancel)",
     });
     window.electron.ipcRenderer.send("request-file-list", selectedFolder);
-  
+    
     // Mark that we've loaded the initial data
     sessionStorage.setItem("hasLoadedInitialData", "true");
-  }, [isElectron, selectedFolder]);
+  }, [isElectron, selectedFolder, isSafeMode]);
   
-
 
   // Listen for folder selection from main process
   useEffect(() => {
@@ -262,57 +318,81 @@ const App = () => {
 
   // Toggle file selection
   const toggleFileSelection = (filePath: string) => {
-    // Normalize the incoming file path to handle cross-platform issues
+    // Normalize the incoming file path
     const normalizedPath = normalizePath(filePath);
     
     setSelectedFiles((prev: string[]) => {
-      // Check if the file is already selected
+      // Check if the file is already selected using case-sensitive/insensitive comparison as appropriate
       const isSelected = prev.some(path => arePathsEqual(path, normalizedPath));
       
       if (isSelected) {
         // Remove the file from selected files
-        const newSelection = prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
-        return newSelection;
+        return prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
       } else {
         // Add the file to selected files
-        const newSelection = [...prev, normalizedPath];
-        return newSelection;
+        return [...prev, normalizedPath];
       }
     });
   };
 
   // Toggle folder selection (select/deselect all files in folder)
   const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
-    // Normalize the folder path
-    const normalizedFolderPath = normalizePath(folderPath);
+    console.log('toggleFolderSelection called with:', { folderPath, isSelected });
     
-    const filesInFolder = allFiles.filter(
-      (file: FileData) =>
-        normalizePath(file.path).startsWith(normalizedFolderPath) && 
-        !file.isBinary && 
-        !file.isSkipped,
-    );
-
-    if (isSelected) {
-      // Add all files from this folder that aren't already selected
-      const filePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
+    // Normalize the folder path for cross-platform compatibility
+    const normalizedFolderPath = normalizePath(folderPath);
+    console.log('Normalized folder path:', normalizedFolderPath);
+    
+    // Function to check if a file is in the given folder or its subfolders
+    const isFileInFolder = (filePath: string, folderPath: string): boolean => {
+      const normalizedFilePath = normalizePath(filePath);
       
+      // A file is in the folder if:
+      // 1. The paths are equal (exact match)
+      // 2. The file path is a subpath of the folder
+      const isMatch = arePathsEqual(normalizedFilePath, folderPath) || 
+                     isSubPath(folderPath, normalizedFilePath);
+      
+      if (isMatch) {
+        console.log(`File ${normalizedFilePath} is in folder ${folderPath}`);
+      }
+      
+      return isMatch;
+    };
+    
+    // Filter all files to get only those in this folder (and subfolders) that are selectable
+    const filesInFolder = allFiles.filter((file: FileData) => {
+      const inFolder = isFileInFolder(file.path, normalizedFolderPath);
+      const selectable = !file.isBinary && !file.isSkipped && !file.excludedByDefault;
+      return selectable && inFolder;
+    });
+    
+    console.log('Found', filesInFolder.length, 'selectable files in folder');
+    
+    // If no selectable files were found, do nothing
+    if (filesInFolder.length === 0) {
+      console.log('No selectable files found in folder, nothing to do');
+      return;
+    }
+    
+    // Extract just the paths from the files and normalize them
+    const folderFilePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
+    console.log('File paths in folder:', folderFilePaths);
+    
+    if (isSelected) {
+      // Adding files - create a new Set with all existing + new files
       setSelectedFiles((prev: string[]) => {
-        const newSelection = [...prev];
-        filePaths.forEach((path: string) => {
-          if (!newSelection.some(p => arePathsEqual(p, path))) {
-            newSelection.push(path);
-          }
-        });
+        const existingSelection = new Set(prev.map(normalizePath));
+        folderFilePaths.forEach((path: string) => existingSelection.add(path));
+        const newSelection = Array.from(existingSelection);
+        console.log(`Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`);
         return newSelection;
       });
     } else {
-      // Remove all files from this folder
+      // Removing files - filter out any file that's in our folder
       setSelectedFiles((prev: string[]) => {
-        const newSelection = prev.filter(
-          (path: string) =>
-            !filesInFolder.some((file: FileData) => arePathsEqual(normalizePath(file.path), path)),
-        );
+        const newSelection = prev.filter((path: string) => !isFileInFolder(path, normalizedFolderPath));
+        console.log(`Removed ${prev.length - newSelection.length} files from selection, total now: ${newSelection.length}`);
         return newSelection;
       });
     }
@@ -436,7 +516,7 @@ const App = () => {
   };
 
   return (
-    <ThemeProvider>
+    <ThemeProvider children={
       <div className="app-container">
         <header className="header">
           <h1>PasteMax</h1>
@@ -463,6 +543,12 @@ const App = () => {
           <div className="processing-indicator">
             <div className="spinner"></div>
             <span>{processingStatus.message}</span>
+            <button
+              className="cancel-btn"
+              onClick={cancelDirectoryLoading}
+            >
+              Cancel
+            </button>
           </div>
         )}
 
@@ -474,7 +560,6 @@ const App = () => {
           <div className="main-content">
             <Sidebar
               selectedFolder={selectedFolder}
-              openFolder={openFolder}
               allFiles={allFiles}
               selectedFiles={selectedFiles}
               toggleFileSelection={toggleFileSelection}
@@ -550,7 +635,7 @@ const App = () => {
           </div>
         )}
       </div>
-    </ThemeProvider>
+    } />
   );
 };
 

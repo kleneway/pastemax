@@ -3,9 +3,21 @@ import { SidebarProps, TreeNode } from "../types/FileTypes";
 import SearchBar from "./SearchBar";
 import TreeItem from "./TreeItem";
 
+/**
+ * Import path utilities for handling file paths across different operating systems.
+ * While not all utilities are used directly, they're kept for consistency and future use.
+ */
+import { normalizePath, join, isSubPath, arePathsEqual } from "../utils/pathUtils";
+
+/**
+ * The Sidebar component displays a tree view of files and folders, allowing users to:
+ * - Navigate through the file structure
+ * - Select/deselect files and folders
+ * - Search for specific files
+ * - Resize the sidebar width
+ */
 const Sidebar = ({
   selectedFolder,
-  openFolder,
   allFiles,
   selectedFiles,
   toggleFileSelection,
@@ -16,25 +28,26 @@ const Sidebar = ({
   deselectAllFiles,
   expandedNodes,
   toggleExpanded,
-}: SidebarProps) => {
-  const [fileTree, setFileTree] = useState<TreeNode[]>([]);
+}: Omit<SidebarProps, 'openFolder'>) => {
+  // State for managing the file tree and UI
+  const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
-  // Min and max width constraints
+  // Sidebar width constraints for a good UX
   const MIN_SIDEBAR_WIDTH = 200;
   const MAX_SIDEBAR_WIDTH = 500;
 
   // Handle mouse down for resizing
-  const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleResizeStart = (e: any) => {
     e.preventDefault();
     setIsResizing(true);
   };
 
   // Handle resize effect
   useEffect(() => {
-    const handleResize = (e: globalThis.MouseEvent) => {
+    const handleResize = (e: any) => {
       if (isResizing) {
         const newWidth = e.clientX;
         if (newWidth >= MIN_SIDEBAR_WIDTH && newWidth <= MAX_SIDEBAR_WIDTH) {
@@ -76,15 +89,17 @@ const Sidebar = ({
         allFiles.forEach((file) => {
           if (!file.path) return;
 
-          const relativePath =
-            selectedFolder && file.path.startsWith(selectedFolder)
-              ? file.path
-                  .substring(selectedFolder.length)
-                  .replace(/^\/|^\\/, "")
-              : file.path;
+          // Normalize both the selectedFolder and file.path
+          const normalizedSelectedFolder = selectedFolder ? normalizePath(selectedFolder) : '';
+          const normalizedFilePath = normalizePath(file.path);
+          
+          // Get the relative path by removing the selectedFolder prefix if it exists
+          const relativePath = normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
+            ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1) // +1 for the trailing slash
+            : normalizedFilePath;
 
-          const parts = relativePath.split(/[/\\]/);
-          let currentPath = "";
+          const parts = relativePath.split('/');
+          let currentPath = '';
           let current = fileMap;
 
           // Build the path in the tree
@@ -92,21 +107,20 @@ const Sidebar = ({
             const part = parts[i];
             if (!part) continue;
 
-            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            // Build the current path segment
+            currentPath = currentPath ? join(currentPath, part) : part;
             
-            // Use the original file.path for files to avoid path duplication
-            const fullPath = i === parts.length - 1 
-              ? file.path // For files, use the original path
-              : (selectedFolder 
-                  ? `${selectedFolder}/${currentPath}` 
-                  : currentPath); // For directories
-
+            // For directory paths, prepend selectedFolder only for the full path
+            const fullPath = normalizedSelectedFolder
+              ? join(normalizedSelectedFolder, currentPath)
+              : currentPath;
+            
             if (i === parts.length - 1) {
               // This is a file
               current[part] = {
-                id: `node-${fullPath}`,
+                id: `node-${file.path}`,
                 name: part,
-                path: file.path, // Use the original file path
+                path: file.path, // Keep the original file path
                 type: "file",
                 level: i,
                 fileData: file,
@@ -224,7 +238,7 @@ const Sidebar = ({
     };
 
     setFileTree((prevTree: TreeNode[]) => applyExpandedState(prevTree));
-  }, [expandedNodes]);
+  }, [expandedNodes, fileTree.length]);
 
   // Flatten the tree for rendering with proper indentation
   const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
