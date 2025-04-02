@@ -121,8 +121,8 @@ module.exports = {
   // File extensions to always mark as binary/unselectable
   // The app already has binary detection, but this ensures specific types
   // are always treated as binary regardless of content detection
-  binaryExtensions: [
-    // Images (including .svg which might not be detected as binary)
+binaryExtensions: [
+  // images:
     ".svg",
     ".jpg",
     ".jpeg",
@@ -131,9 +131,26 @@ module.exports = {
     ".bmp",
     ".tiff",
     ".ico",
+    ".icns", // Added .icns
     ".webp",
-
-    // Other binary formats
+    ".psd",
+    ".heic",
+    ".heif",
+  
+  // videos:
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+  
+  // audio:
+    ".mp3",
+    ".wav",
+    ".ogg",
+    ".flac",
+    // Removed duplicate ".wav"
+  
+  // documents:
     ".pdf",
     ".doc",
     ".docx",
@@ -141,5 +158,24 @@ module.exports = {
     ".xlsx",
     ".ppt",
     ".pptx",
+  
+  // other:
+    ".zip",
+    ".rar",
+    ".tar",
+    ".gz",
+    ".7z",
+    ".exe",
+    ".dll",
+    ".so",
+    ".class",
+    ".o",
+    ".pyc",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+    ".bin",
+    ".dat",
+    ".ttf",
   ],
 };

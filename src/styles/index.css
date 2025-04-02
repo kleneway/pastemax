@@ -1,38 +1,93 @@
+/* ==========================================================================
+   CSS Variables
+   ========================================================================== */
+
+/* -------------------- Light Mode Variables -------------------- */
 :root {
+  /* Background Colors */
   --background-primary: #ffffff;
   --background-secondary: #f8f8f8;
-  --background-selected: rgba(0,0,0,0.06);
+  --background-selected: rgba(0,0,0,0.06); /* Used for selected items */
+
+  /* Accent & Border Colors */
   --accent-blue: #0E639C;
   --border-color: #e0e0e0;
-  --hover-color: #f5f5f5;
+  --hover-color: #f5f5f5; /* Used for hover states */
+
+  /* Text Colors */
   --text-primary: #000000;
   --text-secondary: #666666;
   --text-disabled: #cccccc;
+
+  /* Icon Color */
   --icon-color: #555555;
+
+  /* Status Colors */
   --success-color: #2ecc71;
   --warning-color: #f39c12;
   --error-color: #e74c3c;
+
+  /* Button Colors */
   --primary-button-background: #000000;
   --primary-button-text: #ffffff;
+
+  /* Layout & Spacing */
+  --standard-padding: 16px 24px;
+  --standard-border: 1px solid var(--border-color);
+
+  /* Typography */
+  --font-family-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family-code: Consolas, Menlo, Monaco, "Courier New", monospace;
+
+  /* Scrollbar Variables (Light Mode) */
+  --scrollbar-track: #f1f1f1;
+  --scrollbar-thumb: #c1c1c1;
+  --scrollbar-thumb-hover: #a1a1a1;
+  --scrollbar-width: 8px;
+  --scrollbar-width-thin: 6px; /* For specific areas like file tree */
 }
 
+/* -------------------- Dark Mode Variables -------------------- */
 .dark-mode {
+  /* Background Colors */
   --background-primary: #1E1E1E;
   --background-secondary: #252526;
-  --background-selected: #2A2D2E;
-  --accent-blue: #0E639C;
-  --border-color: #3E3E42;
-  --hover-color: #333333;
+  --background-selected: #2A2D2E; /* Used for selected items */
+
+  /* Accent & Border Colors */
+  --accent-blue: #0E639C; /* Kept consistent for branding */
+  --border-color: #333333;
+  --hover-color: #333333; /* Used for hover states */
+
+  /* Text Colors */
   --text-primary: #E8E8E8;
   --text-secondary: #BBBBBB;
   --text-disabled: #808080;
+
+  /* Icon Color */
   --icon-color: #CCCCCC;
+
+  /* Status Colors (Often kept consistent) */
   --success-color: #2ecc71;
   --warning-color: #f39c12;
   --error-color: #e74c3c;
-  --primary-button-background: #0E639C;
+
+  /* Button Colors */
+  --primary-button-background: #0E639C; /* Using accent blue for primary actions */
   --primary-button-text: #ffffff;
+
+  /* Scrollbar Variables (Dark Mode) */
+  --scrollbar-track: #1E1E1E;
+  --scrollbar-thumb: #424242;
+  --scrollbar-thumb-hover: #4f4f4f;
+
+  /* Set color scheme for browser UI elements (like scrollbars) */
+  color-scheme: dark;
 }
+
+/* ==========================================================================
+   Global Resets & Base Styles
+   ========================================================================== */
 
 * {
   box-sizing: border-box;
@@ -41,15 +96,14 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  font-family: var(--font-family-ui);
   margin: 0;
   padding: 0;
   background-color: var(--background-primary);
   color: var(--text-primary);
   line-height: 1.5;
   height: 100vh;
-  overflow: hidden;
+  overflow: hidden; /* Prevent body scroll, manage scrolling within components */
 }
 
 #root {
@@ -58,17 +112,14 @@ body {
   flex-direction: column;
 }
 
-.app-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
+/* ==========================================================================
+   Base Element Styling (Buttons, Inputs)
+   ========================================================================== */
 
 button {
   cursor: pointer;
   font-family: inherit;
-  border: 1px solid var(--border-color);
+  border: var(--standard-border);
   background-color: var(--background-primary);
   font-size: 14px;
   display: inline-flex;
@@ -99,7 +150,9 @@ button.primary {
 }
 
 button.primary:hover {
+  /* Maintain primary color on hover for emphasis */
   background-color: var(--primary-button-background);
+  /* Add slight opacity change or brightness filter if needed */
 }
 
 button:disabled {
@@ -110,7 +163,7 @@ button:disabled {
 input[type="text"],
 input[type="search"] {
   padding: 8px 12px;
-  border: 1px solid var(--border-color);
+  border: var(--standard-border);
   border-radius: 4px;
   font-family: inherit;
   font-size: 14px;
@@ -126,26 +179,26 @@ input[type="search"]:focus {
   box-shadow: 0 0 0 1px var(--accent-blue);
 }
 
-.monospace {
-  font-family: Consolas, Menlo, Monaco, "Courier New", monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
+/* ==========================================================================
+   Layout Structure (App Container, Header, Main Content, Sidebar, Content Area)
+   ========================================================================== */
 
-/* Main layout structure */
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
+/* -------------------- Header -------------------- */
 .header {
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border-color);
+  padding: var(--standard-padding);
+  border-bottom: var(--standard-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   background-color: var(--background-primary);
+  flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .header h1 {
@@ -153,6 +206,12 @@ input[type="search"]:focus {
   font-weight: 600;
   margin: 0;
   color: var(--text-primary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .folder-info {
@@ -165,16 +224,17 @@ input[type="search"]:focus {
   padding: 6px 12px;
   border-radius: 4px;
   background-color: var(--hover-color);
-  max-width: 300px;
+  max-width: 500px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .select-folder-btn {
   background-color: var(--background-primary);
-  border: 1px solid var(--border-color);
+  border: var(--standard-border);
   color: var(--text-primary);
   padding: 8px 16px;
   font-weight: 500;
@@ -184,31 +244,35 @@ input[type="search"]:focus {
   background-color: var(--hover-color);
 }
 
+/* -------------------- Main Content Area -------------------- */
 .main-content {
   display: flex;
-  flex: 1;
-  overflow: hidden;
-  height: 100%;
+  flex: 1; /* Take remaining vertical space */
+  overflow: hidden; /* Crucial for child scrolling */
+  height: calc(100% - 73px); /* Adjust based on actual header height */
 }
 
+/* -------------------- Sidebar -------------------- */
 .sidebar {
   width: 300px;
   min-width: 200px;
   max-width: 500px;
-  height: 100%;
+  height: 100%; /* Fill parent height */
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-color);
-  overflow: hidden;
+  border-right: var(--standard-border);
+  overflow: hidden; /* Manage internal scrolling */
   background-color: var(--background-secondary);
-  position: relative;
+  position: relative; /* For resize handle positioning */
   transition: width 0.1s ease;
+  flex-shrink: 0; /* Prevent sidebar from shrinking */
 }
 
 .sidebar-header {
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: var(--standard-border);
   background-color: var(--background-secondary);
+  flex-shrink: 0;
 }
 
 .sidebar-title {
@@ -228,16 +292,18 @@ input[type="search"]:focus {
 
 .sidebar-search {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: var(--standard-border);
   background-color: var(--background-secondary);
+  flex-shrink: 0;
 }
 
 .sidebar-actions {
   display: flex;
   padding: 12px 16px;
   gap: 8px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: var(--standard-border);
   background-color: var(--background-secondary);
+  flex-shrink: 0;
 }
 
 .sidebar-action-btn {
@@ -246,21 +312,83 @@ input[type="search"]:focus {
   padding: 6px 12px;
   background-color: var(--background-primary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: var(--standard-border);
 }
 
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px; /* Position slightly outside for easier grabbing */
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  opacity: 0; /* Hidden by default */
+  /* Optional: Add a visual indicator on hover */
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.1); /* Subtle visual feedback */
+}
+
+/* -------------------- Content Area (Right Pane) -------------------- */
+.content-area {
+  flex: 1; /* Take remaining horizontal space */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Manage internal scrolling */
+  background-color: var(--background-primary);
+  min-width: 0; /* Prevent content from pushing layout */
+}
+
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--standard-padding);
+  border-bottom: var(--standard-border);
+  background-color: var(--background-primary);
+  flex-shrink: 0;
+}
+
+.content-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Remove the red underline from content titles (if it existed) */
+.content-title::after {
+  content: none;
+}
+
+.content-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ==========================================================================
+   Component Styles
+   ========================================================================== */
+
+/* -------------------- File Tree (in Sidebar) -------------------- */
 .file-tree {
-  flex: 1;
-  overflow-y: auto;
+  flex: 1; /* Allow tree to grow and fill sidebar space */
+  overflow-y: auto; /* Enable vertical scrolling */
   padding: 8px 0;
   background-color: var(--background-secondary);
 }
 
-.tree-empty {
+.tree-empty,
+.tree-loading {
   padding: 16px;
   text-align: center;
   color: var(--text-secondary);
   font-size: 14px;
+  font-style: italic;
 }
 
 .tree-loading {
@@ -270,10 +398,9 @@ input[type="search"]:focus {
   justify-content: center;
   padding: 24px 16px;
   gap: 12px;
-  color: var(--text-secondary);
 }
 
-.tree-loading .spinner {
+.tree-loading .spinner { /* Spinner defined later */
   width: 24px;
   height: 24px;
 }
@@ -281,7 +408,7 @@ input[type="search"]:focus {
 .tree-item {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
+  padding: 6px 8px; /* Adjust padding as needed */
   margin: 2px 0;
   border-radius: 4px;
   cursor: pointer;
@@ -299,17 +426,16 @@ input[type="search"]:focus {
   background-color: var(--background-selected);
 }
 
-.tree-item-icon {
-  margin-right: 8px;
-  flex-shrink: 0;
-  color: var(--icon-color);
+.tree-item.disabled-item {
+  opacity: 0.7;
+  cursor: default;
 }
 
 .tree-item-content {
   display: flex;
   align-items: center;
   flex: 1;
-  min-width: 0;
+  min-width: 0; /* Prevent overflow issues */
   overflow: hidden;
 }
 
@@ -322,7 +448,8 @@ input[type="search"]:focus {
   margin-right: 4px;
   cursor: pointer;
   color: var(--icon-color);
-  z-index: 2;
+  z-index: 2; /* Ensure toggle is clickable */
+  flex-shrink: 0;
 }
 
 .tree-item-toggle svg {
@@ -334,14 +461,21 @@ input[type="search"]:focus {
   transform: rotate(90deg);
 }
 
+.tree-item-icon {
+  margin-right: 8px;
+  flex-shrink: 0;
+  color: var(--icon-color);
+}
+
 .tree-item-indent {
-  width: 16px;
+  width: 16px; /* Controls indentation level */
   flex-shrink: 0;
 }
 
 .tree-item-checkbox {
   margin-right: 8px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .tree-item-name {
@@ -353,114 +487,38 @@ input[type="search"]:focus {
   color: var(--text-primary);
 }
 
-.tree-item-tokens {
+.tree-item-tokens,
+.tree-item-badge {
   font-size: 11px;
   color: var(--text-secondary);
   margin-left: 6px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tree-item-badge {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background-color: var(--hover-color);
-  color: var(--text-secondary);
-  margin-left: 6px;
-  white-space: nowrap;
+  background-color: var(--hover-color); /* Subtle background */
 }
 
-.content-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background-color: var(--background-primary);
-  min-width: 0;
-}
-
-.content-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--background-primary);
-}
-
-.content-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.content-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.sort-dropdown {
-  position: relative;
-}
-
-.sort-dropdown-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.sort-options {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  background-color: var(--background-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 100;
-  min-width: 180px;
-}
-
-.sort-option {
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  color: var(--text-primary);
-}
-
-.sort-option:hover {
-  background-color: var(--hover-color);
-}
-
-.sort-option.active {
-  background-color: var(--background-selected);
-  font-weight: 600;
-  color: var(--accent-blue);
-}
-
-.file-stats {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
+/* -------------------- File List (in Content Area) -------------------- */
 .file-list-container {
-  flex: 1;
-  overflow: hidden;
+  flex: 1; /* Allow list container to grow */
+  overflow: hidden; /* Manage internal scrolling */
   display: flex;
   flex-direction: column;
 }
 
 .file-list {
-  flex: 1;
-  overflow-y: auto;
+  flex: 1; /* Allow list itself to grow */
+  overflow-y: auto; /* Enable vertical scrolling */
   padding: 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  grid-auto-rows: max-content;
-  align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* Responsive grid */
+  grid-auto-rows: max-content; /* Adjust row height to content */
+  align-content: start; /* Align items to the top */
   gap: 12px;
   background-color: var(--background-primary);
 }
@@ -474,34 +532,41 @@ input[type="search"]:focus {
   font-size: 16px;
   padding: 32px;
   text-align: center;
+  font-style: italic;
 }
 
+/* -------------------- File Card (in File List) -------------------- */
 .file-card {
   display: flex;
   flex-direction: column;
   padding: 10px;
-  border: 1px solid var(--border-color);
+  border: var(--standard-border);
   border-radius: 4px;
-  position: relative;
+  position: relative; /* For absolute positioning of actions */
   transition: all 0.2s ease;
-  height: 80px;
+  height: 80px; /* Fixed height for consistency */
   background-color: var(--background-primary);
+  overflow: hidden; /* Prevent content spillover */
 }
 
 .file-card:hover {
   background-color: var(--hover-color);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  /* Optional: Slightly raise the card */
+  /* transform: translateY(-2px); */
 }
 
 .file-card.selected {
-  border: 2px solid var(--accent-blue);
+  border: 2px solid var(--accent-blue); /* Use thicker border for selection */
   background-color: var(--background-selected);
+  padding: 9px; /* Adjust padding to account for thicker border */
 }
 
 .file-card-header {
   display: flex;
   align-items: center;
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .file-card-icon {
@@ -517,22 +582,24 @@ input[type="search"]:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
+  font-family: var(--font-family-code); /* Use code font for filenames */
 }
 
 .file-card-info {
   display: flex;
   flex-direction: column;
-  margin-bottom: 0;
+  /* Removed margin-bottom: 0; as it wasn't necessary */
+  flex-grow: 1; /* Allow info to take space if needed */
+  justify-content: center; /* Center info vertically */
 }
 
-.file-card-tokens {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
+.file-card-tokens,
 .file-card-status {
-  font-size: 13px;
   color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap; /* Prevent wrapping */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file-card-actions {
@@ -541,8 +608,9 @@ input[type="search"]:focus {
   right: 8px;
   display: flex;
   gap: 4px;
-  opacity: 0;
+  opacity: 0; /* Hidden by default, show on hover */
   transition: opacity 0.2s ease;
+  z-index: 5; /* Ensure actions are above card content */
 }
 
 .file-card:hover .file-card-actions {
@@ -557,7 +625,7 @@ input[type="search"]:focus {
   align-items: center;
   justify-content: center;
   background-color: var(--background-primary);
-  border: 1px solid var(--border-color);
+  border: var(--standard-border);
   border-radius: 4px;
   color: var(--icon-color);
   transition: all 0.15s ease;
@@ -568,7 +636,7 @@ input[type="search"]:focus {
   background-color: var(--hover-color);
   color: var(--accent-blue);
   border-color: var(--accent-blue);
-  transform: translateY(-1px);
+  transform: translateY(-1px); /* Subtle lift effect */
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -577,13 +645,193 @@ input[type="search"]:focus {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-.copy-button-container {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
+/* -------------------- Search Bar (in Sidebar) -------------------- */
+.search-bar {
+  position: relative;
   display: flex;
-  justify-content: center;
   align-items: center;
+  width: 100%;
+  background-color: var(--background-primary); /* Match input background */
+  border: var(--standard-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-bar.focused { /* Class added via JS */
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--icon-color);
+  display: flex; /* Use flex for centering if needed */
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* Icon doesn't block input */
+  z-index: 2;
+  width: 16px; /* Explicit size */
+  height: 16px;
+}
+
+/* Target the input specifically within .search-bar */
+.search-bar .search-input,
+input[type="search"].search-input, /* Also style direct input if used */
+input[type="text"].search-input {
+  width: 100%;
+  padding: 8px 32px 8px 36px !important; /* LTRB: Space for icon and clear button */
+  border: none; /* Border is on the parent .search-bar */
+  border-radius: 4px; /* Match parent */
+  font-size: 14px;
+  outline: none;
+  background-color: transparent; /* Let parent background show */
+  color: var(--text-primary);
+}
+
+/* Remove redundant focus styles on input, handled by parent */
+.search-bar .search-input:focus,
+input[type="search"].search-input:focus,
+input[type="text"].search-input:focus {
+  box-shadow: none; /* Focus is on .search-bar */
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--icon-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%; /* Circular button */
+  cursor: pointer;
+  z-index: 2;
+}
+
+.search-clear-btn:hover {
+  background-color: var(--hover-color);
+}
+
+/* -------------------- Sort Dropdown (in Content Header) -------------------- */
+.sort-dropdown {
+  position: relative; /* For absolute positioning of options */
+}
+
+.sort-dropdown-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: none; /* Make it look less like a standard button */
+  border: none;
+  padding: 4px 8px; /* Adjust padding */
+  border-radius: 4px;
+}
+.sort-dropdown-button:hover {
+  background-color: var(--hover-color);
+}
+
+.sort-options {
+  position: absolute;
+  top: calc(100% + 4px); /* Position below the button */
+  right: 0;
   background-color: var(--background-primary);
+  border: var(--standard-border);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 100; /* Ensure dropdown is above other content */
+  min-width: 180px;
+  padding: 4px 0; /* Add some vertical padding */
+  /* Add animation if desired */
+}
+
+.sort-option {
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: var(--text-primary);
+  display: block; /* Ensure full width clickable */
+  white-space: nowrap;
+}
+
+.sort-option:hover {
+  background-color: var(--hover-color);
+}
+
+.sort-option.active { /* Class added via JS */
+  background-color: var(--background-selected);
+  font-weight: 600;
+  color: var(--accent-blue); /* Highlight active option */
+}
+
+/* -------------------- User Instructions (in Content Area) -------------------- */
+.user-instructions-container {
+  padding: var(--standard-padding);
+  background-color: var(--background-primary);
+  border-top: var(--standard-border); /* Separator line */
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+.user-instructions {
+  position: relative;
+  max-width: 100%;
+}
+
+.user-instructions textarea {
+  width: 100%;
+  min-height: 100px; /* Minimum height, can grow */
+  padding: 12px;
+  border: var(--standard-border);
+  border-radius: 4px;
+  background-color: var(--background-secondary); /* Slightly different background */
+  color: var(--text-primary);
+  font-family: var(--font-family-ui); /* Use UI font */
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical; /* Allow vertical resize */
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.user-instructions textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue);
+  outline: none;
+  background-color: var(--background-primary); /* Change background on focus */
+}
+
+.user-instructions textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+/* -------------------- Copy Button Area (in Content Area) -------------------- */
+.copy-button-container {
+  padding: var(--standard-padding);
+  padding-top: 20px; /* Increased top padding */
+  border-top: var(--standard-border);
+  display: flex;
+  flex-direction: column; /* Stack items vertically */
+  align-items: center; /* Center items horizontally */
+  background-color: var(--background-primary);
+  flex-shrink: 0; /* Prevent shrinking */
+  gap: 16px; /* Add vertical gap between checkbox and button */
+}
+
+/* Optional: Add a label for the copy button */
+.copy-button-container label {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  /* Add styles as needed */
 }
 
 .copy-button {
@@ -595,45 +843,34 @@ input[type="search"]:focus {
   border-radius: 4px;
   transition: all 0.2s ease;
   gap: 8px;
-  border: none;
+  border: none; /* Primary button style often has no border */
   cursor: pointer;
   color: var(--primary-button-text);
   background-color: var(--primary-button-background);
+  /* Removed .primary class duplication */
 }
 
-.copy-button.primary {
-  background-color: var(--primary-button-background);
-  color: var(--primary-button-text);
-  border: none;
-}
-
-.copy-button.primary:hover:not(:disabled) {
-  background-color: var(--primary-button-background);
+.copy-button:hover:not(:disabled) {
+  /* Slightly darken or lighten based on theme */
+  filter: brightness(1.1); /* Example */
 }
 
 .copy-button.full-width {
   width: 100%;
-  max-width: 400px;
+  max-width: 400px; /* Limit max width if needed */
 }
 
-.copy-button.copied {
-  background-color: var(--success-color) !important;
+.copy-button.copied { /* Class added via JS */
+  background-color: var(--success-color) !important; /* Use !important cautiously */
   border-color: var(--success-color) !important;
   color: white !important;
   transition: all 0.2s ease;
-  animation: flash-success 0.3s;
+  animation: flash-success 0.3s ease-out;
 }
 
 @keyframes flash-success {
-  0% {
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.9;
-  }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.02); }
 }
 
 .copy-button-text {
@@ -641,17 +878,21 @@ input[type="search"]:focus {
   letter-spacing: 0.5px;
 }
 
+/* Status message (optional, shown via JS) */
 .copy-status {
   opacity: 0;
   transition: opacity 0.3s ease;
   color: var(--success-color);
   font-weight: 500;
+  font-size: 14px;
+  margin-left: 16px; /* Space from button */
 }
 
-.copy-status.visible {
+.copy-status.visible { /* Class added via JS */
   opacity: 1;
 }
 
+/* -------------------- Processing Indicator -------------------- */
 .processing-indicator {
   display: flex;
   align-items: center;
@@ -659,14 +900,15 @@ input[type="search"]:focus {
   gap: 12px;
   padding: 12px;
   background-color: var(--background-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: var(--standard-border); /* Or top, depending on placement */
+  flex-shrink: 0;
 }
 
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--text-secondary);
-  border-top-color: transparent;
+  border: 2px solid var(--text-secondary); /* Base color */
+  border-top-color: transparent; /* Make one side transparent */
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -692,127 +934,7 @@ input[type="search"]:focus {
   opacity: 0.9;
 }
 
-.error-message {
-  background-color: var(--error-color);
-  color: white;
-  padding: 16px 24px;
-  border-radius: 4px;
-  margin: 24px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tree-loading,
-.empty-tree,
-.empty-list {
-  padding: 16px;
-  text-align: center;
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.search-bar {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  background-color: var(--background-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.search-bar.focused {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px var(--accent-blue);
-}
-
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--icon-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 2;
-  width: 16px;
-  height: 16px;
-}
-
-.search-bar .search-input,
-input[type="search"].search-input,
-input[type="text"].search-input {
-  width: 100%;
-  padding: 8px 32px 8px 36px !important;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  outline: none;
-  background-color: transparent;
-  color: var(--text-primary);
-}
-
-.search-bar .search-input:focus,
-input[type="search"].search-input:focus,
-input[type="text"].search-input:focus {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px var(--accent-blue);
-}
-
-.search-clear-btn {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  padding: 4px;
-  color: var(--icon-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  cursor: pointer;
-  z-index: 2;
-}
-
-.search-clear-btn:hover {
-  background-color: var(--hover-color);
-}
-
-.sidebar-resize-handle {
-  position: absolute;
-  top: 0;
-  right: -5px;
-  width: 10px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 10;
-  opacity: 0;
-}
-
-.sidebar-resize-handle:hover,
-.sidebar-resize-handle:active {
-  opacity: 1;
-  background-color: rgba(0, 0, 0, 0.1);
-}
-
-.selected-folder {
-  font-size: 14px;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 500px;
-  display: inline-block;
-}
-
-/* macOS-style segmented control for theme toggle */
+/* -------------------- Theme Toggle (in Header) -------------------- */
 .theme-segmented-control {
   display: flex;
   background-color: var(--background-secondary);
@@ -821,8 +943,9 @@ input[type="text"].search-input:focus {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   width: fit-content;
   position: relative;
-  height: 32px;
-  overflow: hidden;
+  height: 32px; /* Fixed height */
+  overflow: hidden; /* Clip the background */
+  border: 1px solid var(--border-color); /* Add subtle border */
 }
 
 .theme-segment {
@@ -831,62 +954,253 @@ input[type="text"].search-input:focus {
   justify-content: center;
   gap: 6px;
   padding: 0 12px;
-  height: 28px;
+  height: 28px; /* Inner height */
   border: none;
   background: none;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   position: relative;
-  z-index: 1;
+  z-index: 1; /* Above the background */
   transition: color 0.2s ease;
-  border-radius: 4px;
+  border-radius: 4px; /* Rounded corners for segments */
   cursor: pointer;
   white-space: nowrap;
-  min-width: 70px;
+  min-width: 70px; /* Ensure minimum width */
 }
 
 .theme-segment:focus {
-  outline: none;
+  outline: none; /* Handled by active state or browser default */
 }
 
-.theme-segment span {
+.theme-segment span { /* Icon size */
   font-size: 12px;
 }
 
-.theme-segment.active {
+.theme-segment.active { /* Class added via JS */
   color: var(--text-primary);
-  background-color: var(--background-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  background-color: var(--background-primary); /* Active segment background */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Add depth */
 }
 
-/* For dark mode, adjust active segment appearance */
-.dark-mode .theme-segment.active {
-  background-color: rgba(255, 255, 255, 0.1);
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+.monospace {
+  font-family: var(--font-family-code);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-/* Animation for segment transition */
-.theme-segment {
-  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.header-actions {
+.error-message {
+  background-color: var(--error-color);
+  color: white;
+  padding: var(--standard-padding);
+  border-radius: 4px;
+  margin: 24px; /* Example margin */
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
 }
 
-.tree-item.disabled-item {
-  opacity: 0.7;
-  cursor: default;
+/* ==========================================================================
+   Scrollbar Styling
+   ========================================================================== */
+
+/* -------------------- Webkit Browsers (Chrome, Safari, Edge) -------------------- */
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
 }
 
-.tree-item.disabled-item .tree-item-badge {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background-color: var(--hover-color);
-  color: var(--text-secondary);
-  margin-left: 6px;
-  white-space: nowrap;
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 8px;
+  /* Create inset effect */
+  border: 2px solid var(--scrollbar-track);
+  background-clip: padding-box; /* Clip background to padding box */
+  transition: background-color 0.2s ease, border-width 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  border: 2px solid var(--scrollbar-track); /* Keep border consistent */
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track); /* Match track background */
+}
+
+/* -------------------- Firefox -------------------- */
+/* Apply scrollbar styles globally or to specific scrollable elements */
+* {
+  scrollbar-width: thin; /* Or 'auto' or 'none' */
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); /* thumb track */
+}
+
+/* -------------------- Thin Scrollbars for Specific Areas -------------------- */
+.file-tree::-webkit-scrollbar,
+.file-list::-webkit-scrollbar,
+textarea::-webkit-scrollbar {
+  width: var(--scrollbar-width-thin);
+}
+
+.file-tree::-webkit-scrollbar-thumb,
+.file-list::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb {
+  border-width: 1px; /* Adjust border for thinner scrollbar */
+}
+
+/* Firefox thin scrollbar (already handled by global `scrollbar-width: thin;`) */
+
+
+/* ==========================================================================
+   Dark Mode Overrides
+   ========================================================================== */
+
+/* Apply dark mode variables (already defined in .dark-mode selector) */
+
+/* Specific element overrides for better contrast/appearance in dark mode */
+.dark-mode .file-card {
+  border-color: var(--border-color); /* Use dark mode border color */
+  background-color: var(--background-secondary);
+}
+
+.dark-mode .file-card:hover {
+  background-color: var(--hover-color); /* Use dark mode hover color */
+  border-color: #444444; /* Slightly lighter border on hover */
+}
+
+.dark-mode .file-card.selected {
+  border-color: var(--accent-blue); /* Keep accent for selection */
+  background-color: var(--background-selected);
+}
+
+/* Ensure borders use the dark mode variable */
+.dark-mode .content-header,
+.dark-mode .user-instructions-container,
+.dark-mode .copy-button-container,
+.dark-mode .header,
+.dark-mode .sidebar,
+.dark-mode .sidebar-header,
+.dark-mode .sidebar-search,
+.dark-mode .sidebar-actions,
+.dark-mode button,
+.dark-mode input[type="text"],
+.dark-mode input[type="search"],
+.dark-mode .search-bar,
+.dark-mode .user-instructions textarea,
+.dark-mode .sort-options,
+.dark-mode .processing-indicator,
+.dark-mode .file-card-action,
+.dark-mode .sort-dropdown-button,
+.dark-mode input[type="checkbox"], /* Style checkboxes if needed */
+.dark-mode .theme-segmented-control {
+  border-color: var(--border-color);
+}
+
+/* Specific background/color adjustments */
+.dark-mode .selected-folder {
+  background-color: #2D2D2D; /* Slightly different shade */
+}
+
+.dark-mode .tree-item:hover {
+  background-color: #2C2C2C; /* Darker hover for tree items */
+}
+
+.dark-mode .tree-item-badge {
+  background-color: #333333;
+  color: #bbbbbb;
+}
+
+.dark-mode .file-card-action {
+  background-color: #2C2C2C; /* Darker action button background */
+}
+
+/* Input/Textarea focus states */
+.dark-mode input[type="text"]:focus,
+.dark-mode input[type="search"]:focus,
+.dark-mode .user-instructions textarea:focus {
+  border-color: var(--accent-blue); /* Keep accent focus */
+  background-color: #252526; /* Slightly darker background on focus */
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+/* Input text and caret color */
+.dark-mode textarea,
+.dark-mode input[type="text"],
+.dark-mode input[type="search"] {
+  color: var(--text-primary);
+  caret-color: var(--text-primary); /* Ensure caret is visible */
+}
+
+.dark-mode textarea::placeholder {
+  color: var(--text-disabled); /* Use disabled text color for placeholder */
+}
+
+/* Theme toggle active state */
+.dark-mode .theme-segment.active {
+  background-color: #3E3E42; /* Darker active background */
+}
+
+/* Scrollbar overrides for dark mode (Webkit) */
+.dark-mode ::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.dark-mode ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-color: var(--scrollbar-track);
+  /* Optional: Add subtle inner shadow for depth */
+  /* box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.05); */
+}
+
+.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  border-color: var(--scrollbar-track);
+  /* box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.1); */
+}
+
+.dark-mode ::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+/* Fix label alignment if needed */
+label {
+  display: flex;
+  align-items: center;
+}
+
+/* Remove potentially problematic global border override */
+/* .dark-mode * {
+  border-color: #333333; /* This was too broad, removed */
+/* } */
+
+/* Ensure specific container borders are correct */
+.dark-mode .content-header,
+.dark-mode .user-instructions-container,
+.dark-mode .copy-button-container {
+  border-color: var(--border-color);
+}
+
+/* Ensure container backgrounds are correct */
+.dark-mode .user-instructions-container {
+  background-color: var(--background-primary);
+  border-radius: 0; /* Remove if causing issues */
+}
+
+.dark-mode .user-instructions textarea {
+  background-color: var(--background-secondary);
+}
+
+/* Final check on copy button label color */
+.dark-mode .copy-button-container label {
+  color: var(--text-secondary); /* Use secondary text color */
 }

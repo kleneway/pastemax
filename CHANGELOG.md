@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.2.1 (2024-06-19)
+
+### Added
+- Added "Clean" npm script with rimraf for cross-platform build directory cleanup
+- Added "Clear Data" button to explicitly reset application state
+- Added enhanced state management during page reload
+- Added UserInstructions component to allow custom notes in copied output
+- Added improved copyable format with better syntax highlighting
+- Added sophisticated language detection system for copied content:
+  - Language-specific code blocks with backticks (```language) for LLM compatibility
+  - Automatic detection of over 200 file types and extensions
+  - Proper mapping of less common extensions to standard language identifiers
+  - Consistent language tagging for optimal syntax highlighting in LLM contexts
+- Added modern scrollbar styling with theme consistency:
+  - Customized scrollbar appearance for both light and dark modes
+  - Thin scrollbars for content areas with better UI integration
+  - Cross-browser compatibility with Firefox and WebKit support
+
+### Fixed
+- Fixed file path normalization in copied content to ensure cross-platform compatibility
+- Fixed state preservation issue when refreshing the application
+- Fixed selected files not being properly maintained after reload
+- Fixed inconsistent path separators in file maps and content output
+- Fixed language detection for many uncommon file types
+
+### Improved
+- Improved path handling in contentFormatUtils.ts with explicit normalization
+- Enhanced localStorage synchronization before page reload
+- Optimized file selection preservation logic
+- Improved session state handling with more comprehensive reset functionality
+- Modularized utilities in the utils directory:
+  - Separated language detection into dedicated languageUtils.ts module
+  - Improved content formatting with consistent path normalization
+  - Better separation of concerns between path, language, and content utilities
+- Enhanced cross-platform compatibility with normalized paths in copied content
+- Enhanced content format for improved LLM compatibility:
+  - Better structured output with clear section tags
+  - Normalized file paths for cross-platform compatibility
+  - Sophisticated language-aware code fencing
+  - Standardized language identifiers for consistent highlighting
+- Enhanced UI with modern scrollbars that match application theme:
+  - Light mode: subtle gray scrollbars with hover effects
+  - Dark mode: darker scrollbars that blend with the interface
+  - Improved visual consistency across scrollable containers
+
 ## v1.2.0
 
 ### Added

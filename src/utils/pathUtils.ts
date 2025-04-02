@@ -49,13 +49,13 @@ export function isWindows(): boolean {
  * This helps with path comparison across different platforms
  * 
  * @param filePath The file path to normalize
- * @returns The normalized path with forward slashes
+ * @returns The normalized path with forward slashes, or an empty string if input is falsy.
  */
-export function normalizePath(filePath: string): string {
-  if (!filePath) return filePath;
+export function normalizePath(filePath: string | null | undefined): string {
+  if (!filePath) return ""; // Return empty string for null/undefined/empty input
   
   // Replace backslashes with forward slashes
-  return filePath.replace(/\\/g, '/');
+  return String(filePath).replace(/\\/g, '/'); // Ensure filePath is treated as string
 }
 
 /**
@@ -65,15 +65,29 @@ export function normalizePath(filePath: string): string {
  * @param path2 Second path to compare
  * @returns True if the paths are equivalent, false otherwise
  */
-export function arePathsEqual(path1: string, path2: string): boolean {
+export function arePathsEqual(path1: string | null | undefined, path2: string | null | undefined): boolean {
+  // If both are null/undefined/empty, consider them equal
+  if (!path1 && !path2) {
+    return true;
+  }
+  // If only one is null/undefined/empty, they are not equal
+  if (!path1 || !path2) {
+    return false;
+  }
+
   const normalized1 = normalizePath(path1);
   const normalized2 = normalizePath(path2);
   
+  // If after normalization, either is empty (e.g., input was just '/'), check equality
+  if (!normalized1 && !normalized2) return true;
+  if (!normalized1 || !normalized2) return false;
+
   // On Windows, paths are case-insensitive
   if (isWindows()) {
     return normalized1.toLowerCase() === normalized2.toLowerCase();
   }
   
+  // On other OS, paths are case-sensitive
   return normalized1 === normalized2;
 }
 

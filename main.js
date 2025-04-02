@@ -140,63 +140,7 @@ try {
   encoder = null;
 }
 
-// Binary file extensions that should be excluded from token counting
-const BINARY_EXTENSIONS = [
-  // Images
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".gif",
-  ".bmp",
-  ".tiff",
-  ".ico",
-  ".icns",
-  ".webp",
-  ".svg",
-  ".heic",
-  ".heif",
-  ".pdf",
-  ".psd",
-  // Audio/Video
-  ".mp3",
-  ".mp4",
-  ".wav",
-  ".ogg",
-  ".avi",
-  ".mov",
-  ".mkv",
-  ".flac",
-  // Archives
-  ".zip",
-  ".rar",
-  ".tar",
-  ".gz",
-  ".7z",
-  // Documents
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".ppt",
-  ".pptx",
-  ".xls",
-  ".xlsx",
-  // Compiled
-  ".exe",
-  ".dll",
-  ".so",
-  ".class",
-  ".o",
-  ".pyc",
-  // Database
-  ".db",
-  ".sqlite",
-  ".sqlite3",
-  // Others
-  ".bin",
-  ".dat",
-].concat(binaryExtensions || []); // Add any additional binary extensions from excluded-files.js
-
-// Max file size to read (5MB)
+// Max file size to read (5MB) - BINARY_EXTENSIONS constant removed
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 function createWindow() {
@@ -266,16 +210,17 @@ ipcMain.on("open-folder", async (event) => {
   });
 
   if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
-    const selectedPath = result.filePaths[0];
+    const rawPath = result.filePaths[0]; // Get the raw path
+    const normalizedPath = normalizePath(rawPath); // Normalize it immediately
     try {
       // Ensure we're only sending a string, not an object
-      const pathString = String(selectedPath);
-      console.log("Sending folder-selected event with path:", pathString);
-      event.sender.send("folder-selected", pathString);
+      // Use the normalized path for logging and sending
+      console.log("Sending folder-selected event with normalized path:", normalizedPath);
+      event.sender.send("folder-selected", normalizedPath);
     } catch (err) {
       console.error("Error sending folder-selected event:", err);
-      // Try a more direct approach as a fallback
-      event.sender.send("folder-selected", String(selectedPath));
+      // Try a more direct approach as a fallback, still using normalized path
+      event.sender.send("folder-selected", normalizedPath);
     }
   }
 });
@@ -337,7 +282,8 @@ function loadGitignore(rootDir) {
 // Check if file is binary based on extension
 function isBinaryFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  return BINARY_EXTENSIONS.includes(ext);
+  // Use imported binaryExtensions directly
+  return binaryExtensions.includes(ext);
 }
 
 // Count tokens using tiktoken with o200k_base encoding
@@ -532,12 +478,18 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
 
 // Modify the request-file-list handler to use async/await
 ipcMain.on("request-file-list", async (event, folderPath) => {
-  // Prevent processing if already loading
+  // Prevent processing if already loading - Simply return if busy
   if (isLoadingDirectory) {
-    console.log("Already processing a directory, cancelling previous operation");
-    cancelDirectoryLoading(BrowserWindow.fromWebContents(event.sender));
-    // Wait a bit before starting new operation
-    await new Promise(resolve => setTimeout(resolve, 100));
+    console.log("Already processing a directory, ignoring new request for:", folderPath);
+    // Optionally send a status update to the renderer
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window && window.webContents && !window.webContents.isDestroyed()) {
+      window.webContents.send("file-processing-status", {
+        status: "busy",
+        message: "Already processing another directory. Please wait.",
+      });
+    }
+    return; // Exit the handler
   }
 
   try {
@@ -593,17 +545,24 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     event.sender.send("file-list-data", serializedFiles);
   } catch (err) {
     console.error("Error processing file list:", err);
-    isLoadingDirectory = false;
-  
+    isLoadingDirectory = false; // Reset flag on error
+
     if (loadingTimeoutId) {
       clearTimeout(loadingTimeoutId);
       loadingTimeoutId = null;
     }
-  
+
     event.sender.send("file-processing-status", {
       status: "error",
       message: `Error: ${err.message}`,
     });
+  } finally {
+    // Ensure the flag is always reset, even on error or cancellation
+    isLoadingDirectory = false;
+    if (loadingTimeoutId) {
+      clearTimeout(loadingTimeoutId);
+      loadingTimeoutId = null;
+    }
   }
 });
 
@@ -687,20 +646,26 @@ ipcMain.on("debug-file-selection", (event, data) => {
  */
 function cancelDirectoryLoading(window) {
   if (!isLoadingDirectory) return;
-  
+
   console.log("Cancelling directory loading process immediately");
+  // Ensure flag is reset here as well
   isLoadingDirectory = false;
-  
+
   if (loadingTimeoutId) {
     clearTimeout(loadingTimeoutId);
     loadingTimeoutId = null;
   }
-  
+
   // Send cancellation message immediately
-  window.webContents.send("file-processing-status", {
-    status: "cancelled",
-    message: "Directory loading cancelled",
-  });
+  // Add checks for window validity
+  if (window && window.webContents && !window.webContents.isDestroyed()) {
+    window.webContents.send("file-processing-status", {
+      status: "cancelled",
+      message: "Directory loading cancelled",
+    });
+  } else {
+    console.log("Window not available to send cancellation status.");
+  }
 }
 
 /**
@@ -719,6 +684,7 @@ function setupDirectoryLoadingTimeout(window, folderPath) {
   // Set a new timeout
   loadingTimeoutId = setTimeout(() => {
     console.log(`Directory loading timed out after ${MAX_DIRECTORY_LOAD_TIME / 1000} seconds: ${folderPath}`);
+    // Call cancelDirectoryLoading which now resets the flag
     cancelDirectoryLoading(window);
   }, MAX_DIRECTORY_LOAD_TIME);
 }

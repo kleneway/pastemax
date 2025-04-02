@@ -1,0 +1,2078 @@
+<file_map>
+/Users/haikalp/Documents/Code/Projects/pastemax-forked
+├── .cursor
+│   └── rules
+│       ├── current-stack.mdc
+│       └── reserve.mdc
+├── .github
+│   ├── workflows
+│   │   ├── build.yml
+│   │   ├── debug-build.yml
+│   │   └── release.yml
+│   └── README.actions.md
+├── docs
+│   ├── feature
+│   │   ├── 1.2.0-1.3.0
+│   │   │   ├── fixes.md
+│   │   │   ├── KnownIssue.md
+│   │   │   └── update.md
+│   │   ├── ignoreBinariesUI
+│   │   │   ├── ignoreBinariesTODOS.md
+│   │   │   └── prompt(IgnoreBinaries).txt
+│   │   └── multi-root
+│   │       ├── multipleRootPlan.md
+│   │       ├── multipleRootPrompt.md
+│   │       └── testCase.md
+│   ├── design.md
+│   ├── excluded-files.md
+│   ├── mainOLD.js
+│   ├── tiktoken.md
+│   └── ux-rubric.md
+├── OldImplementation
+│   ├── src
+│   │   ├── components
+│   │   │   ├── CopyButton.tsx
+│   │   │   ├── FileCard.tsx
+│   │   │   ├── FileList.tsx
+│   │   │   ├── SearchBar.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── ThemeToggle.tsx
+│   │   │   ├── TreeItem.tsx
+│   │   │   └── UserInstructions.tsx
+│   │   ├── styles
+│   │   │   └── index.css
+│   │   ├── types
+│   │   │   └── FileTypes.ts
+│   │   ├── utils
+│   │   │   ├── pathUtils.ts
+│   │   │   └── README.md
+│   │   └── App.tsx
+│   ├── main.js
+│   ├── preload.js
+│   └── renderer.js
+├── public
+│   ├── favicon.icns
+│   ├── favicon.ico
+│   ├── favicon.png
+│   └── favicon.svg
+├── scripts
+│   ├── fix-dependencies.js
+│   ├── notarize.js
+│   ├── README.md
+│   ├── test-excluded-files.js
+│   ├── test-gitignore-crossplatform.js
+│   ├── test-gitignore.js
+│   ├── test-local-build.js
+│   ├── test-path-utils.js
+│   └── verify-build.js
+├── shared
+│   ├── path-utils.d.ts
+│   ├── path-utils.js
+│   └── README.md
+├── src
+│   ├── assets
+│   │   └── favicon.svg
+│   ├── components
+│   │   ├── CopyButton.tsx
+│   │   ├── FileCard.tsx
+│   │   ├── FileList.tsx
+│   │   ├── SearchBar.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── ThemeToggle.tsx
+│   │   ├── TreeItem.tsx
+│   │   └── UserInstructions.tsx
+│   ├── context
+│   │   └── ThemeContext.tsx
+│   ├── styles
+│   │   └── index.css
+│   ├── types
+│   │   └── FileTypes.ts
+│   ├── utils
+│   │   ├── pathUtils.ts
+│   │   └── README.md
+│   ├── App.tsx
+│   ├── declarations.d.ts
+│   ├── index.html
+│   ├── main.tsx
+│   └── react-app-env.d.ts
+├── .cursor-tasks.md
+├── .eslintrc.cjs
+├── build.js
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── dev.js
+├── docker-compose.yml
+├── Dockerfile
+├── excluded-files.js
+├── index.html
+├── LICENSE
+├── main.js
+├── package.json
+├── preload.js
+├── README.docker.md
+├── README.md
+├── RELEASE.md
+├── renderer.js
+├── repoPromptCompose.xml
+├── repoPromptComposeNOXML.xml
+├── repoPromptDiffEdit.xml
+├── repoPromptWholeEdit.xml
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts
+
+</file_map>
+
+<file_contents>
+File: /Users/haikalp/Documents/Code/Projects/pastemax-forked/main.js
+```js
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require("electron");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const crypto = require("crypto"); // Added for CSP nonce generation
+
+// Import shared path utilities
+const { 
+  normalizePath, 
+  makeRelativePath, 
+  ensureAbsolutePath, 
+  safePathJoin, 
+  safeRelativePath,
+  getPathSeparator,
+  basename,
+  dirname,
+  isWindows,
+  isNode,
+  isValidPath,
+  join,
+  extname,
+  arePathsEqual,
+  isSubPath,
+} = require("./shared/path-utils");
+
+// Global variables for directory loading control
+let isLoadingDirectory = false;
+let loadingTimeoutId = null;
+let isHandlingGitignore = false; // New flag to track gitignore processing specifically
+const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
+
+// Add a cache for gitignore file paths to avoid rescanning
+const gitignoreCache = new Map();
+// Maximum age in milliseconds before invalidating the cache (10 minutes)
+const GITIGNORE_CACHE_MAX_AGE = 10 * 60 * 1000;
+
+// Track root folders for multi-root support
+let rootFolders = [];
+
+// Store reference to mainWindow globally so we can access it for theme updates
+let mainWindow = null;
+// Track current theme for DevTools sync
+let currentTheme = 'light';
+
+// Global state to track directory loading progress
+let totalFilesProcessed = 0;
+let totalFilesFound = 0;
+let totalDirectoriesProcessed = 0;
+let totalDirectoriesFound = 0;
+let isDeepScanEnabled = true; // Enable this for thorough scanning, can be disabled for faster superficial scans
+
+// Import the excluded files list and other configurations
+const { 
+  excludedFiles, 
+  binaryExtensions, 
+  skipDirectories,
+  defaultIgnorePatterns,
+  excludedRegexPatterns
+} = require("./excluded-files");
+
+// List of directories that should be completely skipped during traversal
+// These are directories that often cause performance issues and don't provide useful content
+const SKIP_DIRS = skipDirectories;
+
+// Add handling for the 'ignore' module
+let ignore;
+try {
+  ignore = require("ignore");
+  console.log("Successfully loaded ignore module");
+} catch (err) {
+  console.error("Failed to load ignore module:", err);
+  // Simple fallback implementation for when the ignore module fails to load
+  ignore = {
+    // Simple implementation that just matches exact paths
+    createFilter: () => {
+      return (path) => !excludedFiles.includes(path);
+    },
+  };
+  console.log("Using fallback for ignore module");
+}
+
+// Initialize tokenizer with better error handling
+let tiktoken;
+try {
+  tiktoken = require("tiktoken");
+  console.log("Successfully loaded tiktoken module");
+} catch (err) {
+  console.error("Failed to load tiktoken module:", err);
+  tiktoken = null;
+}
+
+// Initialize the encoder once at startup with better error handling
+let encoder;
+try {
+  if (tiktoken) {
+    encoder = tiktoken.get_encoding("o200k_base"); // gpt-4o encoding
+    console.log("Tiktoken encoder initialized successfully");
+  } else {
+    throw new Error("Tiktoken module not available");
+  }
+} catch (err) {
+  console.error("Failed to initialize tiktoken encoder:", err);
+  // Fallback to a simpler method if tiktoken fails
+  console.log("Using fallback token counter");
+  encoder = null;
+}
+
+// Binary file extensions that should be excluded from token counting
+// Use the centralized list from excluded-files.js and add any built-in defaults
+const BINARY_EXTENSIONS = [
+  // Images
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".bmp",
+  ".tiff",
+  ".ico",
+  ".icns",
+  ".webp",
+  ".svg",
+  ".heic",
+  ".heif",
+  ".pdf",
+  ".psd",
+  // Audio/Video
+  ".mp3",
+  ".mp4",
+  ".wav",
+  ".ogg",
+  ".avi",
+  ".mov",
+  ".mkv",
+  ".flac",
+  // Archives
+  ".zip",
+  ".rar",
+  ".tar",
+  ".gz",
+  ".7z",
+  // Documents
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
+  // Compiled
+  ".exe",
+  ".dll",
+  ".so",
+  ".class",
+  ".o",
+  ".pyc",
+  // Database
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  // Others
+  ".bin",
+  ".dat",
+].concat(binaryExtensions || []); // Add extensions from excluded-files.js
+
+// Max file size to read (5MB)
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+function createWindow() {
+  // Check if we're starting in safe mode (Shift key pressed)
+  const isSafeMode = process.argv.includes('--safe-mode');
+  const isDev = process.env.NODE_ENV === "development";
+  
+  // In development, suppress Electron security warnings about CSP
+  // This is only for development since we need 'unsafe-eval' for Vite HMR
+  if (isDev) {
+    process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+    console.log("Development mode: Security warnings about CSP are suppressed");
+  } else {
+    // Production security enhancements
+    console.log("Production mode: Applying strict security settings");
+  }
+  
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: safePathJoin(__dirname, "preload.js"),
+      // Production security settings
+      sandbox: !isDev, // Enable sandbox in production for better security
+      devTools: isDev, // Only enable DevTools in development
+      webSecurity: true, // Enforce web security
+      additionalArguments: [`--app-path=${app.getAppPath()}`], // Pass app path for better cross-platform file resolution
+    },
+  });
+
+  // Set proper Content-Security-Policy
+  // This helps prevent the Insecure Content-Security-Policy warning
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    // Generate a random nonce for CSP
+    const nonce = Buffer.from(crypto.randomBytes(16)).toString('base64');
+    
+    // Different CSP for development and production
+    const isDev = process.env.NODE_ENV === "development";
+    
+    // Only log CSP once for main documents
+    if (details.resourceType === 'mainFrame') {
+      if (isDev) {
+        console.log("Using development CSP with 'unsafe-eval' for Vite HMR");
+      } else {
+        console.log("Using production CSP with nonce-based script-src");
+      }
+    }
+    
+    let cspValue;
+    if (isDev) {
+      // Development policy that works with Vite's HMR
+      // 'unsafe-eval' is required for Vite HMR in development mode only
+      cspValue = [
+        "default-src 'self';" +
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval';" +
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;" +
+        "font-src 'self' data: https://fonts.gstatic.com;" +
+        "connect-src 'self' ws: wss: http://localhost:* https://localhost:*;" +
+        "img-src 'self' data:;"
+      ];
+    } else {
+      // Secure policy for production with nonce-based script-src
+      cspValue = [
+        "default-src 'self';" +
+        `script-src 'self' 'nonce-${nonce}';` +
+        "style-src 'self' 'unsafe-inline';" + // 'unsafe-inline' needed for most CSS frameworks
+        "font-src 'self' data:;" +
+        "connect-src 'self';" +
+        "img-src 'self' data:;" +
+        "object-src 'none';" + // Prevent object/embed tags
+        "base-uri 'self';" + // Restrict base URIs
+        "form-action 'self';" + // Restrict form submissions
+        "frame-ancestors 'self';" + // Control embedding 
+        "upgrade-insecure-requests;" // Upgrade HTTP to HTTPS
+      ];
+    }
+    
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': cspValue,
+        'X-Content-Type-Options': ['nosniff'],
+        'X-XSS-Protection': ['1; mode=block'],
+        'X-Frame-Options': ['SAMEORIGIN']
+      }
+    });
+  });
+
+  // Pass the safe mode flag to the renderer
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.send('startup-mode', { 
+      safeMode: isSafeMode 
+    });
+  });
+
+  // Register the escape key to cancel directory loading
+  globalShortcut.register('Escape', () => {
+    if (isLoadingDirectory) {
+      cancelDirectoryLoading(mainWindow);
+    }
+  });
+
+  // Clean up shortcuts when window is closed
+  mainWindow.on('closed', () => {
+    globalShortcut.unregisterAll();
+  });
+
+  // Listen for DevTools open events to sync theme
+  mainWindow.webContents.on('devtools-opened', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('DevTools opened, applying current theme');
+      // Apply current theme to DevTools
+      syncDevToolsTheme(currentTheme);
+    }
+  });
+
+  // Also listen for toggling DevTools via keyboard shortcut
+  app.on('web-contents-created', (event, contents) => {
+    contents.on('devtools-opened', () => {
+      console.log('DevTools opened via shortcut, applying current theme');
+      syncDevToolsTheme(currentTheme);
+    });
+  });
+
+  // In development, load from Vite dev server
+  // In production, load from built files
+  if (process.env.NODE_ENV === "development") {
+    // Use the URL provided by the dev script, or fall back to Vite's default port
+    const startUrl = process.env.ELECTRON_START_URL || "http://localhost:5173";
+    // Wait a moment for dev server to be ready (increased timeout)
+    setTimeout(() => {
+      // Clear any cached data to prevent redirection loops
+      mainWindow.webContents.session.clearCache().then(() => {
+        // Set development-specific webPreferences before loading URL
+        mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+          // Open external links in browser, internal links in the app
+          if (url.startsWith('http')) {
+            return { action: 'allow' };
+          }
+          return { action: 'deny' };
+        });
+        
+        mainWindow.loadURL(startUrl);
+        // Open DevTools in development mode with options to reduce warnings
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+        }
+        // Open DevTools in the same window instead of detached
+        mainWindow.webContents.openDevTools();
+        console.log(`Loading from dev server at ${startUrl}`);
+      });
+    }, 2000);
+  } else {
+    const indexPath = safePathJoin(__dirname, "dist", "index.html");
+    console.log(`Loading from built files at ${indexPath}`);
+
+    // Use loadURL with file protocol for better path resolution
+    const indexUrl = `file://${indexPath}`;
+    mainWindow.loadURL(indexUrl);
+  }
+
+  // Add basic error handling for failed loads
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (event, errorCode, errorDescription, validatedURL) => {
+      console.error(
+        `Failed to load the application: ${errorDescription} (${errorCode})`,
+      );
+      console.error(`Attempted to load URL: ${validatedURL}`);
+
+      if (process.env.NODE_ENV === "development") {
+        const retryUrl =
+          process.env.ELECTRON_START_URL || "http://localhost:5173";
+        // Clear cache before retrying
+        mainWindow.webContents.session.clearCache().then(() => {
+          setTimeout(() => mainWindow.loadURL(retryUrl), 2000);
+        });
+      } else {
+        // Retry with explicit file URL
+        const indexPath = safePathJoin(__dirname, "dist", "index.html");
+        const indexUrl = `file://${indexPath}`;
+        mainWindow.loadURL(indexUrl);
+      }
+    },
+  );
+}
+
+app.whenReady().then(() => {
+  // Set secure app-wide defaults for production
+  const isDev = process.env.NODE_ENV === "development";
+  
+  if (!isDev) {
+    // Production security settings
+    
+    // Prevent navigation to non-local content
+    app.on('web-contents-created', (event, contents) => {
+      contents.on('will-navigate', (event, navigationUrl) => {
+        const parsedUrl = new URL(navigationUrl);
+        // Only allow navigation to local content
+        if (!parsedUrl.protocol.includes('file:')) {
+          console.log('Blocked navigation to:', navigationUrl);
+          event.preventDefault();
+        }
+      });
+      
+      // Block new window creation to external URLs
+      contents.setWindowOpenHandler(({ url }) => {
+        // Only allow opening windows for internal pages
+        if (url.startsWith('file:')) {
+          return { action: 'allow' };
+        }
+        // Open external URLs in the default browser instead
+        if (url.startsWith('https:')) {
+          setImmediate(() => {
+            console.log('Opening in browser:', url);
+            require('electron').shell.openExternal(url);
+          });
+        }
+        return { action: 'deny' };
+      });
+    });
+  }
+  
+  createWindow();
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+// Generate a unique ID for root folders
+function generateRootId() {
+  return `root-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+// Handle folder selection (first root)
+ipcMain.on("open-folder", async (event) => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+  });
+
+  if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+    const selectedPath = result.filePaths[0];
+    try {
+      // Clear the gitignore cache since we're loading a new project
+      gitignoreCache.clear();
+      console.log("Cleared gitignore cache for new project");
+      
+      // Create a new root folder object
+      const newRoot = {
+        id: generateRootId(),
+        path: selectedPath,
+        name: path.basename(selectedPath),
+        isExpanded: true
+      };
+      
+      // Reset root folders array
+      rootFolders = [newRoot];
+      
+      // Ensure we're only sending a string, not an object
+      const pathString = String(selectedPath);
+      console.log("Sending folder-selected event with path:", pathString);
+      event.sender.send("folder-selected", pathString);
+      
+      // Also send the root folder information
+      console.log("Sending root-folder-added event with root:", newRoot);
+      event.sender.send("root-folder-added", newRoot);
+    } catch (err) {
+      console.error("Error sending folder-selected event:", err);
+      // Try a more direct approach as a fallback
+      event.sender.send("folder-selected", String(selectedPath));
+    }
+  }
+});
+
+// Handle adding another root folder
+ipcMain.on("add-root-folder", async (event) => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+  });
+
+  if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+    const selectedPath = result.filePaths[0];
+    try {
+      // Check if this path is already in rootFolders
+      const pathExists = rootFolders.some(root => 
+        arePathsEqual(normalizePath(root.path), normalizePath(selectedPath))
+      );
+      
+      if (pathExists) {
+        event.sender.send("root-folder-error", {
+          error: "This folder has already been added",
+          path: selectedPath
+        });
+        return;
+      }
+      
+      // Check if this path is a subfolder of any existing root
+      const isSubfolderOfExistingRoot = rootFolders.some(root => 
+        isSubPath(normalizePath(root.path), normalizePath(selectedPath))
+      );
+      
+      if (isSubfolderOfExistingRoot) {
+        event.sender.send("root-folder-error", {
+          error: "This folder is a subfolder of an existing root folder",
+          path: selectedPath
+        });
+        return;
+      }
+      
+      // Check if any existing root is a subfolder of this path
+      const hasSubfolderRoot = rootFolders.some(root => 
+        isSubPath(normalizePath(selectedPath), normalizePath(root.path))
+      );
+      
+      if (hasSubfolderRoot) {
+        event.sender.send("root-folder-error", {
+          error: "An existing root folder is a subfolder of this folder",
+          path: selectedPath
+        });
+        return;
+      }
+      
+      // Add to root folders array
+      const newRoot = {
+        id: generateRootId(),
+        path: selectedPath,
+        name: path.basename(selectedPath),
+        isExpanded: true
+      };
+      
+      rootFolders.push(newRoot);
+      
+      console.log("Added new root folder:", newRoot);
+      event.sender.send("root-folder-added", newRoot);
+    } catch (err) {
+      console.error("Error adding root folder:", err);
+      event.sender.send("root-folder-error", {
+        error: err.message,
+        path: selectedPath
+      });
+    }
+  }
+});
+
+// Handle removal of a root folder
+ipcMain.on("remove-root-folder", (event, rootId) => {
+  console.log(`Removing root folder with ID: ${rootId}`);
+  
+  const initialLength = rootFolders.length;
+  clearRootState(rootId);
+  
+  if (rootFolders.length < initialLength) {
+    console.log(`Successfully removed root folder with ID: ${rootId}`);
+    event.sender.send("root-folder-removed", {
+      rootId,
+      remainingRoots: rootFolders
+    });
+    
+    // Send state cleanup event
+    event.sender.send("state-cleanup", {
+      type: "root-removed",
+      rootId
+    });
+  } else {
+    console.error(`Root folder with ID ${rootId} not found`);
+    event.sender.send("root-folder-error", {
+      error: "Root folder not found",
+      rootId
+    });
+  }
+});
+
+// Handle removal of all root folders
+ipcMain.on("remove-all-root-folders", (event) => {
+  const initialLength = rootFolders.length;
+  clearAllState();
+  
+  console.log(`Removed all root folders (${initialLength} folders)`);
+  event.sender.send("root-folders-all-removed");
+  
+  // Send state cleanup event
+  event.sender.send("state-cleanup", {
+    type: "all-roots-removed"
+  });
+});
+
+// Add clear cache handler
+ipcMain.on("clear-cache", (event) => {
+  clearCache();
+  
+  // Send cache cleared event
+  event.sender.send("cache-cleared");
+  
+  // Send state cleanup event
+  event.sender.send("state-cleanup", {
+    type: "cache-cleared"
+  });
+});
+
+/**
+ * Parse .gitignore files if they exist and create an ignore filter
+ * Handles path normalization for cross-platform compatibility
+ * Finds and consolidates patterns from all .gitignore files in the project
+ * 
+ * @param {string} rootDir - The root directory containing .gitignore files
+ * @param {Electron.WebContents|Electron.IpcMainEvent} [sender] - Event or WebContents to send status updates to
+ * @returns {Promise<object>} - Configured ignore filter
+ */
+async function loadGitignore(rootDir, sender) {
+  console.log(`Loading gitignore patterns for ${rootDir}`);
+  
+  // Only send status updates if we're still in the initial loading phase or explicitly handling gitignore files
+  const shouldSendUpdates = isLoadingDirectory || isHandlingGitignore;
+  
+  // Set the gitignore handling flag
+  isHandlingGitignore = true;
+  
+  // Send processing status update if we have a sender and should send updates
+  const sendStatusUpdate = (message) => {
+    try {
+      if (sender && shouldSendUpdates) {
+        const statusUpdate = {
+          status: "processing",
+          message: message
+        };
+        
+        // Handle both WebContents and IpcMainEvent objects
+        if (sender.send) {
+          sender.send("file-processing-status", statusUpdate);
+        } else if (sender.webContents && sender.webContents.send) {
+          sender.webContents.send("file-processing-status", statusUpdate);
+        }
+      }
+    } catch (err) {
+      console.error("Error sending gitignore status update:", err);
+    }
+  };
+  
+  if (shouldSendUpdates) {
+    sendStatusUpdate("Finding and parsing .gitignore files...");
+  }
+  
+  // Create a default ignore filter
+  let ig;
+  
+  try {
+    ig = ignore();
+  } catch (err) {
+    console.error("Error creating ignore filter:", err);
+    // Reset the gitignore handling flag
+    isHandlingGitignore = false;
+    // Return a simple fallback filter that doesn't ignore anything
+    return {
+      ignores: (path) => {
+        console.log("Using fallback ignore filter for:", path);
+        return false;
+      }
+    };
+  }
+  
+  try {
+    // Ensure root directory path is absolute and normalized
+    rootDir = ensureAbsolutePath(rootDir);
+    
+    // Step 1: Find all .gitignore files in the project
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Scanning for .gitignore files...");
+    }
+    const gitignoreFiles = await findAllGitignoreFiles(rootDir, 10, shouldSendUpdates ? sender : null);
+    
+    // Step 2: Consolidate patterns from all gitignore files
+    let consolidatedPatterns = [];
+    if (gitignoreFiles.length > 0) {
+      if (shouldSendUpdates) {
+        sendStatusUpdate(`Processing ${gitignoreFiles.length} .gitignore files...`);
+      }
+      consolidatedPatterns = await consolidateIgnorePatterns(gitignoreFiles, rootDir);
+    } else {
+      console.log(`No .gitignore files found in ${rootDir}, using only default ignores`);
+    }
+    
+    // Step 3: Merge with default ignores and excluded files
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Finalizing file exclusion patterns...");
+    }
+    const finalPatterns = mergeWithDefaultIgnores(consolidatedPatterns);
+    
+    // Step 4: Add all patterns to the ignore filter
+    ig.add(finalPatterns);
+    
+    console.log(`Ignore filter configured with ${finalPatterns.length} patterns`);
+    
+    // Reset the gitignore handling flag
+    isHandlingGitignore = false;
+    
+    return ig;
+  } catch (err) {
+    console.error("Error configuring ignore filter:", err);
+    
+    // Reset the gitignore handling flag
+    isHandlingGitignore = false;
+    
+    // Return a simple fallback filter that doesn't ignore anything
+    return {
+      ignores: (path) => {
+        console.log("Using fallback ignore filter with error:", path);
+        return false;
+      }
+    };
+  }
+}
+
+// Check if file is binary based on extension
+function isBinaryFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return BINARY_EXTENSIONS.includes(ext);
+}
+
+// Additional function to detect binary files using content heuristics
+function detectBinaryContent(buffer, sampleSize = 512) {
+  // Check a small sample of the file for null bytes or non-UTF8 characters
+  // This is a simple heuristic and not foolproof, but catches many binary files
+  try {
+    if (!buffer || buffer.length === 0) return false;
+    
+    // Check up to sampleSize bytes (or the whole buffer if smaller)
+    const checkSize = Math.min(buffer.length, sampleSize);
+    
+    // Count null bytes and non-printable characters
+    let nullCount = 0;
+    let nonPrintableCount = 0;
+    
+    for (let i = 0; i < checkSize; i++) {
+      const byte = buffer[i];
+      if (byte === 0) nullCount++;
+      // Check for non-printable characters (control characters except tabs, newlines)
+      if ((byte < 9 || (byte > 10 && byte < 32)) && byte !== 13) {
+        nonPrintableCount++;
+      }
+    }
+    
+    // If more than 1% nulls or 10% non-printable, likely binary
+    return (nullCount / checkSize > 0.01) || (nonPrintableCount / checkSize > 0.1);
+  } catch (err) {
+    console.error("Error detecting binary content:", err);
+    return false; // On error, assume not binary
+  }
+}
+
+// Count tokens using tiktoken with o200k_base encoding
+function countTokens(text) {
+  // Simple fallback implementation if encoder fails
+  if (!encoder) {
+    return Math.ceil(text.length / 4);
+  }
+
+  try {
+    // Remove any special tokens that might cause issues
+    const cleanText = text.replace(/<\|endoftext\|>/g, '');
+    const tokens = encoder.encode(cleanText);
+    return tokens.length;
+  } catch (err) {
+    console.error("Error counting tokens:", err);
+    // Fallback to character-based estimation on error
+    return Math.ceil(text.length / 4);
+  }
+}
+
+/**
+ * Checks if a directory should be completely skipped
+ * @param {string} dirName - The name of the directory to check
+ * @returns {boolean} - True if the directory should be skipped
+ */
+function shouldSkipDirectory(dirName) {
+  return SKIP_DIRS.includes(dirName);
+}
+
+/**
+ * Recursively reads files from a directory with chunked processing and cancellation support.
+ * Implements several performance and safety features:
+ * - Processes files in small chunks to maintain UI responsiveness
+ * - Supports immediate cancellation at any point
+ * - Handles binary files and large files appropriately
+ * - Respects .gitignore and custom exclusion patterns
+ * - Provides progress updates to the UI
+ * - Handles cross-platform path issues including UNC paths
+ *
+ * @param {string} dir - The directory to process
+ * @param {string} rootDir - The root directory (used for relative path calculations)
+ * @param {object} ignoreFilter - The ignore filter instance for file exclusions
+ * @param {BrowserWindow} window - The Electron window instance for sending updates
+ * @returns {Promise<Array>} Array of processed file objects
+ */
+async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot = false, rootId = null) {
+  // Ensure rootId is consistently handled
+  const effectiveRootId = rootId || generateRootId();
+  
+  if (!dir || !rootDir) {
+    console.error("Invalid directory paths:", { dir, rootDir });
+    return [];
+  }
+
+  // Normalize paths for consistency
+  const normalizedDir = normalizePath(dir);
+  const normalizedRootDir = normalizePath(rootDir);
+
+  let results = [];
+  let entries;
+
+  try {
+    entries = await fs.promises.readdir(normalizedDir, { withFileTypes: true });
+  } catch (error) {
+    console.error(`Error reading directory ${normalizedDir}:`, error);
+    window?.webContents.send("file-processing-status", {
+      status: "error",
+      message: `Error reading directory: ${error.message}`,
+      path: normalizedDir,
+      rootId: effectiveRootId
+    });
+    return [];
+  }
+
+  // Update progress counters
+  totalDirectoriesProcessed++;
+  if (isRoot) {
+    totalDirectoriesFound = 1; // Reset for new root
+    totalFilesFound = 0;
+    totalFilesProcessed = 0;
+  }
+
+  // Process each entry
+  for (const entry of entries) {
+    const fullPath = safePathJoin(normalizedDir, entry.name);
+    
+    // Skip if path is invalid or should be excluded
+    if (!_isValidPath(fullPath) || shouldSkipDirectory(entry.name)) {
+      continue;
+    }
+
+    // Apply gitignore filter
+    const relativePath = makeRelativePath(normalizedRootDir, fullPath);
+    if (ignoreFilter && ignoreFilter(relativePath)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      totalDirectoriesFound++;
+      
+      // Process subdirectory
+      const subResults = await readFilesRecursively(
+        fullPath,
+        normalizedRootDir,
+        ignoreFilter,
+        window,
+        false,
+        effectiveRootId // Pass the effective rootId to maintain consistency
+      );
+      
+      // Add directory entry with rootId
+      results.push({
+        name: entry.name,
+        path: fullPath,
+        relativePath,
+        isDirectory: true,
+        children: [],
+        rootId: effectiveRootId // Include rootId for directories
+      });
+      
+      results = results.concat(subResults);
+      
+    } else if (entry.isFile()) {
+      totalFilesFound++;
+      
+      try {
+        const stats = await fs.promises.stat(fullPath);
+        
+        // Skip files that are too large
+        if (stats.size > MAX_FILE_SIZE) {
+          console.log(`Skipping large file: ${fullPath} (${stats.size} bytes)`);
+          continue;
+        }
+
+        // Create file entry with rootId
+        const fileEntry = {
+          name: entry.name,
+          path: fullPath,
+          relativePath,
+          isDirectory: false,
+          size: stats.size,
+          modifiedTime: stats.mtime,
+          tokenCount: 0, // Default value
+          rootId: effectiveRootId
+        };
+        if (!fileEntry.isBinary) {
+          const content = await fs.promises.readFile(fullPath, 'utf8');
+          fileEntry.content = content;
+          fileEntry.tokenCount = countTokens(content);
+        }
+        }
+
+        results.push(fileEntry);
+        totalFilesProcessed++;
+
+        // Send progress update
+        if (window && totalFilesFound > 0) {
+          window.webContents.send("file-processing-status", {
+            status: "processing",
+            processed: totalFilesProcessed,
+            total: totalFilesFound,
+            current: fullPath,
+            rootId: effectiveRootId
+          });
+        }
+      } catch (error) {
+        console.error(`Error processing file ${fullPath}:`, error);
+      }
+    }
+  }
+
+  // Send completion status for root directory
+  if (isRoot && window) {
+    window.webContents.send("file-processing-status", {
+      status: "complete",
+      processed: totalFilesProcessed,
+      total: totalFilesFound,
+      rootId: effectiveRootId
+    });
+  }
+
+  return results;
+}
+
+// Handle file list request
+ipcMain.on("request-file-list", async (event, { folderPath, rootId = null }) => {
+  if (!isLoadingDirectory) {
+    console.log("Directory loading is not active");
+    return;
+  }
+
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) {
+    console.error("No window found for file list request");
+    return;
+  }
+
+  try {
+    // Reset progress counters for this request
+    resetProgressCounters();
+
+    // Load gitignore filter for this root
+    const ignoreFilter = await loadGitignore(folderPath, event.sender);
+
+    // Process the directory
+    const files = await readFilesRecursively(
+      folderPath,
+      folderPath,
+      ignoreFilter,
+      window,
+      true,
+      rootId
+    );
+
+    if (!Array.isArray(files)) {
+      console.error("Error: readFilesRecursively did not return an array");
+      event.sender.send("file-list-data", {
+        error: "Failed to read directory structure",
+        files: [],
+        rootId
+      });
+      return;
+    }
+
+    // Send the results back to the renderer
+    event.sender.send("file-list-data", {
+      files,
+      rootId,
+      error: null
+    });
+
+  } catch (error) {
+    console.error("Error processing directory:", error);
+    event.sender.send("file-list-data", {
+      error: error.message || "Failed to process directory",
+      files: [],
+      rootId
+    });
+  }
+});
+
+/**
+ * Checks if a file should be excluded by default, using glob matching and .gitignore patterns
+ * This function implements the primary exclusion logic for determining which files to show.
+ * 
+ * Order of operations:
+ * 1. Special handling for root directory and root files
+ * 2. Check against common regex patterns for excluded files (fast path)
+ * 3. Check against .gitignore patterns
+ * 4. Check against default excluded file patterns
+ * 
+ * @param {string} filePath - The file path to check
+ * @param {string} rootDir - The root directory
+ * @returns {Promise<boolean>} - Whether the file should be excluded
+ */
+async function shouldExcludeByDefault(filePath, rootDir) {
+  // Handle empty paths to prevent errors
+  if (!filePath || !rootDir) {
+    console.warn("shouldExcludeByDefault received empty path:", { filePath, rootDir });
+    return false;
+  }
+
+  try {
+    // Ensure both paths are normalized for consistent handling across platforms
+    filePath = normalizePath(filePath);
+    rootDir = normalizePath(rootDir);
+
+    // Handle Windows drive letter case sensitivity
+    if (process.platform === 'win32') {
+      filePath = filePath.toLowerCase();
+      rootDir = rootDir.toLowerCase();
+    }
+
+    // Check if the paths are on the same drive (Windows)
+    if (process.platform === 'win32') {
+      const fileDrive = filePath.slice(0, 2).toLowerCase();
+      const rootDrive = rootDir.slice(0, 2).toLowerCase();
+      
+      if (fileDrive !== rootDrive) {
+        console.log(`File on different drive: ${filePath} vs ${rootDir}`);
+        return false; // Different drives, can't be excluded by relative patterns
+      }
+    }
+
+    // Calculate the relative path
+    // Use our safeRelativePath for proper cross-platform path handling
+    const relativePath = safeRelativePath(rootDir, filePath);
+    // Then normalize to forward slashes and make it a proper relative path
+    const relativePathNormalized = makeRelativePath(relativePath);
+    
+    // Handle empty relative paths (root directory case)
+    if (!relativePathNormalized || relativePathNormalized === '') {
+      console.log("Root directory or empty path detected in shouldExcludeByDefault");
+      return false; // Don't exclude the root directory itself
+    }
+    
+    // Special handling for files directly in root (no path separators)
+    if (!relativePathNormalized.includes('/') && !relativePathNormalized.includes('\\')) {
+      // Check for specific root-level files that should be excluded
+      const rootFilesToExclude = [
+        'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 
+        '.gitignore', '.npmrc', '.prettierrc', '.eslintrc', 
+        'tsconfig.json', '.babelrc'
+      ];
+      
+      if (rootFilesToExclude.includes(relativePathNormalized)) {
+        return true;
+      }
+      
+      // We want to show files in the root directory by default
+      return false;
+    }
+    
+    // Check for common large/generated files that should be excluded using regex patterns from excluded-files.js
+    // These are quick checks that don't require loading full patterns
+    for (const pattern of excludedRegexPatterns) {
+      if (pattern.test(relativePathNormalized)) {
+        return true;
+      }
+    }
+    
+    // Debug log - only for certain paths to avoid spam
+    if (relativePathNormalized.includes('node_modules') || 
+        relativePathNormalized.includes('.git/') ||
+        relativePathNormalized.endsWith('.min.js')) {
+      console.log(`Checking if ${relativePathNormalized} should be excluded`);
+    }
+    
+    // Load gitignore patterns for this root directory
+    const gitignoreFilter = await loadGitignore(rootDir, null);
+    
+    // Check if the file is ignored by gitignore patterns
+    if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function') {
+      try {
+        if (gitignoreFilter.ignores(relativePathNormalized)) {
+          if (relativePathNormalized.includes('node_modules') || 
+              relativePathNormalized.includes('.git/') ||
+              relativePathNormalized.endsWith('.min.js')) {
+            console.log(`File excluded by gitignore: ${relativePathNormalized}`);
+          }
+          return true;
+        }
+      } catch (ignoreErr) {
+        console.error(`Error checking gitignore for ${relativePathNormalized}:`, ignoreErr);
+      }
+    }
+    
+    // Finally, check against the default exclusion patterns
+    try {
+      const ig = ignore().add(excludedFiles);
+      const shouldExclude = ig.ignores(relativePathNormalized);
+      
+      if (shouldExclude && (
+          relativePathNormalized.includes('node_modules') || 
+          relativePathNormalized.includes('.git/') ||
+          relativePathNormalized.endsWith('.min.js'))) {
+        console.log(`File excluded by patterns: ${relativePathNormalized}`);
+      }
+      
+      return shouldExclude;
+    } catch (ignoreError) {
+      console.error("Error in ignore.ignores():", ignoreError);
+      return false; // On ignore error, don't exclude the file
+    }
+  } catch (error) {
+    console.error("Error in shouldExcludeByDefault:", error);
+    return false; // On any error, don't exclude the file
+  }
+}
+
+// Add a debug handler for file selection
+ipcMain.on("debug-file-selection", (event, data) => {
+  console.log("DEBUG - File Selection:", data);
+});
+
+/**
+ * Handles the cancellation of directory loading operations.
+ * Ensures clean cancellation by:
+ * - Clearing all timeouts
+ * - Resetting loading flags
+ * - Notifying the UI immediately
+ * 
+ * @param {BrowserWindow} window - The Electron window instance to send updates to
+ */
+function cancelDirectoryLoading(window) {
+  if (!isLoadingDirectory) return;
+  
+  console.log("Cancelling directory loading process immediately");
+  isLoadingDirectory = false;
+  
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+  
+  // Send cancellation message immediately
+  window.webContents.send("file-processing-status", {
+    status: "cancelled",
+    message: "Directory loading cancelled",
+  });
+}
+
+/**
+ * Sets up a safety timeout for directory loading operations.
+ * Prevents infinite loading by automatically cancelling after MAX_DIRECTORY_LOAD_TIME.
+ * 
+ * @param {BrowserWindow} window - The Electron window instance
+ * @param {string} folderPath - The path being processed (for logging)
+ */
+function setupDirectoryLoadingTimeout(window, folderPath) {
+  // Clear any existing timeout
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+  }
+  
+  // Set a new timeout
+  loadingTimeoutId = setTimeout(() => {
+    console.log(`Directory loading timed out after ${MAX_DIRECTORY_LOAD_TIME / 1000} seconds: ${folderPath}`);
+    cancelDirectoryLoading(window);
+  }, MAX_DIRECTORY_LOAD_TIME);
+}
+
+// Add IPC listener for theme changes
+ipcMain.on("theme-changed", (event, theme) => {
+  // Store the current theme
+  currentTheme = theme;
+  
+  // Apply theme to DevTools if they're open
+  syncDevToolsTheme(theme);
+});
+
+/**
+ * Synchronizes the DevTools appearance with the application theme
+ * @param {string} theme - The current theme ('light' or 'dark')
+ */
+function syncDevToolsTheme(theme) {
+  // Only proceed if we're in development mode
+  const isDev = process.env.NODE_ENV === "development";
+  if (!isDev) {
+    return; // DevTools aren't enabled in production
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  
+  // Ensure DevTools are open before trying to access them
+  if (!mainWindow.webContents.isDevToolsOpened()) {
+    console.log('DevTools not open, skipping theme sync');
+    return;
+  }
+  
+  const devTools = mainWindow.webContents.devToolsWebContents;
+  if (!devTools) {
+    console.log('DevTools WebContents not available');
+    return;
+  }
+  
+  try {
+    console.log(`Applying ${theme} theme to DevTools`);
+    
+    // Apply dark theme CSS when in dark mode
+    if (theme === 'dark') {
+      devTools.insertCSS(`
+        :root, :host {
+          --toolbar-bg: #1e1e1e;
+          --toolbar-color: #e8e8e8;
+          --toolbar-border: #3e3e42;
+          --searchable-view-bg: #252526;
+          --input-bg: #333333;
+          --input-color: #e8e8e8;
+          --input-border: #3e3e42;
+          --panel-bg: #1e1e1e;
+          --panel-color: #e8e8e8;
+          --panel-item-hover: #333333;
+          --tab-selected-bg: #0e639c;
+          --tab-selected-color: white;
+          --search-match-bg: rgba(255, 255, 0, 0.2);
+        }
+        
+        body.platform-windows .monospace, 
+        body.platform-windows .source-code,
+        body.platform-linux .monospace, 
+        body.platform-linux .source-code,
+        body.platform-mac .monospace, 
+        body.platform-mac .source-code {
+          font-family: Consolas, Menlo, Monaco, "Courier New", monospace !important;
+        }
+
+        .platform-windows #console-prompt .CodeMirror.CodeMirror-focused.cm-focused,
+        .platform-linux #console-prompt .CodeMirror.CodeMirror-focused.cm-focused,
+        .platform-mac #console-prompt .CodeMirror.CodeMirror-focused.cm-focused {
+          background-color: #333333 !important;
+        }
+      `).catch(err => console.error('Error injecting dark mode CSS:', err));
+      
+      // Use executeJavaScript to add dark-mode class
+      devTools.executeJavaScript(`
+        document.documentElement.classList.add('dark-mode');
+        document.body.classList.add('dark-mode');
+      `).catch(err => console.error('Error adding dark-mode class:', err));
+    } else {
+      // Remove dark theme and reset to default light theme
+      devTools.executeJavaScript(`
+        document.documentElement.classList.remove('dark-mode');
+        document.body.classList.remove('dark-mode');
+      `).catch(err => console.error('Error removing dark-mode class:', err));
+    }
+  } catch (err) {
+    console.error('Failed to sync DevTools theme:', err);
+  }
+}
+
+// Reset the progress counters when starting a new directory scan
+function resetProgressCounters() {
+  totalFilesProcessed = 0;
+  totalFilesFound = 0;
+  totalDirectoriesProcessed = 0;
+  totalDirectoriesFound = 0;
+}
+
+/**
+ * Checks if any of the cached gitignore files have been modified
+ * @param {string} rootDir - The root directory
+ * @returns {Promise<boolean>} - Returns true if any files were modified
+ */
+async function checkGitignoreFilesChanged(rootDir) {
+  if (!gitignoreCache.has(rootDir)) {
+    return true; // No cache, consider it changed
+  }
+  
+  const { timestamp, files } = gitignoreCache.get(rootDir);
+  
+  // Check if any of the cached files have been modified
+  for (const filePath of files) {
+    try {
+      const stats = await fs.promises.stat(filePath);
+      const lastModified = stats.mtimeMs;
+      
+      if (lastModified > timestamp) {
+        console.log(`Gitignore file changed: ${filePath}`);
+        return true;
+      }
+    } catch (err) {
+      console.error(`Error checking file modification time for ${filePath}:`, err);
+      // If we can't check, assume it changed
+      return true; 
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Find all .gitignore files in a project directory structure
+ * @param {string} rootDir - The root directory to start searching from
+ * @param {number} maxDepth - Maximum depth to search (default: 10)
+ * @param {Electron.WebContents|Electron.IpcMainEvent} [sender] - Event or WebContents to send status updates to
+ * @returns {Promise<Array<string>>} - Array of paths to .gitignore files
+ */
+async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
+  console.log(`Finding all .gitignore files in ${rootDir} (max depth: ${maxDepth})`);
+  
+  // Only send updates if we're in initial loading or explicitly handling gitignore
+  const shouldSendUpdates = isLoadingDirectory || isHandlingGitignore;
+  
+  // Send processing status update if we have a sender and should send updates
+  const sendStatusUpdate = (message) => {
+    try {
+      if (sender && shouldSendUpdates) {
+        const statusUpdate = {
+          status: "processing",
+          message: message
+        };
+        
+        // Handle both WebContents and IpcMainEvent objects
+        if (sender.send) {
+          sender.send("file-processing-status", statusUpdate);
+        } else if (sender.webContents && sender.webContents.send) {
+          sender.webContents.send("file-processing-status", statusUpdate);
+        }
+      }
+    } catch (err) {
+      console.error("Error sending gitignore status update:", err);
+    }
+  };
+  
+  // Check the cache first
+  const cacheKey = rootDir;
+  if (gitignoreCache.has(cacheKey)) {
+    const { timestamp, files } = gitignoreCache.get(cacheKey);
+    
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Checking for changes in .gitignore files...");
+    }
+    
+    // Check if files have been modified
+    const filesChanged = await checkGitignoreFilesChanged(rootDir);
+    
+    // Use cached results if they're not too old and files haven't changed
+    if (Date.now() - timestamp < GITIGNORE_CACHE_MAX_AGE && !filesChanged) {
+      console.log(`Using cached gitignore files for ${rootDir} (${files.length} files)`);
+      return files;
+    }
+    if (filesChanged) {
+      console.log(`Gitignore files changed, rescanning for ${rootDir}`);
+      if (shouldSendUpdates) {
+        sendStatusUpdate("Detected changes in .gitignore files, rescanning...");
+      }
+    } else {
+      console.log(`Cache expired for ${rootDir}, rescanning for gitignore files`);
+      if (shouldSendUpdates) {
+        sendStatusUpdate("Refreshing .gitignore cache...");
+      }
+    }
+  }
+
+  const gitignoreFiles = [];
+  const dirsToSkip = new Set(SKIP_DIRS);
+  
+  if (shouldSendUpdates) {
+    sendStatusUpdate("Scanning directories for .gitignore files...");
+  }
+  
+  // Helper function to recursively find gitignore files
+  async function findGitignoreInDir(dir, currentDepth = 0) {
+    if (currentDepth > maxDepth) {
+      return; // Stop if we've reached the maximum depth
+    }
+    
+    // Check if we should skip this directory
+    const dirName = basename(dir);
+    if (dirsToSkip.has(dirName)) {
+      return; // Skip this directory
+    }
+    
+    try {
+      // Check if there's a .gitignore file in this directory
+      const gitignorePath = safePathJoin(dir, '.gitignore');
+      try {
+        await fs.promises.access(gitignorePath, fs.constants.F_OK);
+        gitignoreFiles.push(gitignorePath);
+        if (shouldSendUpdates) {
+          sendStatusUpdate(`Found .gitignore in ${dirName}`);
+        }
+      } catch (e) {
+        // No .gitignore in this directory, continue
+      }
+      
+      // Read the directory entries
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      
+      // Process subdirectories
+      for (const entry of entries) {
+        if (entry.isDirectory() && !dirsToSkip.has(entry.name)) {
+          await findGitignoreInDir(safePathJoin(dir, entry.name), currentDepth + 1);
+        }
+      }
+    } catch (err) {
+      console.error(`Error scanning directory ${dir} for gitignore files:`, err);
+    }
+  }
+  
+  try {
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Starting deep scan for .gitignore files...");
+    }
+    await findGitignoreInDir(rootDir);
+    
+    // Update the cache with the newly found files
+    gitignoreCache.set(cacheKey, {
+      timestamp: Date.now(),
+      files: gitignoreFiles
+    });
+    
+    console.log(`Found ${gitignoreFiles.length} .gitignore files in ${rootDir}`);
+    return gitignoreFiles;
+  } catch (error) {
+    console.error("Error finding gitignore files:", error);
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Error finding .gitignore files");
+    }
+    return [];
+  }
+}
+
+/**
+ * Read and parse a gitignore file
+ * @param {string} filePath - Path to the gitignore file
+ * @param {string} rootDir - The root directory of the project
+ * @returns {Object} - Object containing patterns and metadata
+ */
+async function readGitignoreFile(filePath, rootDir) {
+  try {
+    const content = await fs.promises.readFile(filePath, 'utf8');
+    const dirPath = dirname(filePath);
+    const relativeDir = safeRelativePath(rootDir, dirPath);
+    const normalizedRelativeDir = normalizePath(relativeDir);
+    
+    // Parse patterns from the file
+    const patterns = content
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#')); // Remove comments and empty lines
+    
+    return {
+      path: filePath,
+      dirPath,
+      relativeDir: normalizedRelativeDir,
+      patterns,
+      isRootGitignore: dirPath === rootDir
+    };
+  } catch (err) {
+    console.error(`Error reading gitignore file ${filePath}:`, err);
+    return {
+      path: filePath,
+      dirPath: dirname(filePath),
+      patterns: [],
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Consolidate patterns from multiple gitignore files
+ * @param {Array<string>} gitignoreFiles - Array of paths to gitignore files
+ * @param {string} rootDir - The root directory of the project
+ * @returns {Promise<Array<string>>} - Consolidated list of unique patterns
+ */
+async function consolidateIgnorePatterns(gitignoreFiles, rootDir) {
+  console.log(`Consolidating patterns from ${gitignoreFiles.length} gitignore files`);
+  
+  // Map to store unique patterns with their sources
+  const patternMap = new Map();
+  // Set to track patterns that should be negated
+  const negatedPatterns = new Set();
+  
+  // Process each gitignore file
+  for (const filePath of gitignoreFiles) {
+    const gitignoreData = await readGitignoreFile(filePath, rootDir);
+    const { patterns, relativeDir, isRootGitignore } = gitignoreData;
+    
+    if (patterns.length === 0) continue;
+    
+    console.log(`Processing ${patterns.length} patterns from ${filePath}`);
+    
+    // Process each pattern
+    for (let pattern of patterns) {
+      // Handle negation
+      const isNegated = pattern.startsWith('!');
+      if (isNegated) {
+        pattern = pattern.substring(1);
+      }
+      
+      // Normalize pattern
+      let normalizedPattern = normalizePath(pattern);
+      
+      // For non-root gitignore files, adjust patterns to be relative to the root
+      if (!isRootGitignore && relativeDir && !pattern.startsWith('/')) {
+        // Don't prefix if the pattern is already absolute or explicitly specific to its directory
+        if (!pattern.includes('/')) {
+          // Pattern applies to any file with this name in any subdirectory
+          // Keep it as is
+        } else {
+          // Pattern is relative to the gitignore file's directory
+          normalizedPattern = path.posix.join(relativeDir, normalizedPattern);
+        }
+      }
+      
+      // Store pattern with its source for debugging
+      if (isNegated) {
+        negatedPatterns.add(normalizedPattern);
+      } else {
+        patternMap.set(normalizedPattern, {
+          source: filePath,
+          original: pattern
+        });
+      }
+    }
+  }
+  
+  // Create the final list of patterns
+  const consolidatedPatterns = [];
+  
+  // Add non-negated patterns
+  for (const [pattern, metadata] of patternMap.entries()) {
+    if (!negatedPatterns.has(pattern)) {
+      consolidatedPatterns.push(pattern);
+    }
+  }
+  
+  // Add negated patterns last so they take precedence
+  negatedPatterns.forEach(pattern => {
+    consolidatedPatterns.push(`!${pattern}`);
+  });
+  
+  console.log(`Consolidated to ${consolidatedPatterns.length} unique patterns`);
+  // Log some sample patterns for debugging
+  if (consolidatedPatterns.length > 0) {
+    console.log("Sample consolidated patterns:", consolidatedPatterns.slice(0, 5));
+  }
+  
+  return consolidatedPatterns;
+}
+
+/**
+ * Merge consolidated gitignore patterns with default exclusion patterns
+ * @param {Array<string>} consolidatedPatterns - Patterns from gitignore files
+ * @returns {Array<string>} - Final merged patterns with duplicates removed
+ */
+function mergeWithDefaultIgnores(consolidatedPatterns) {
+  // Get the default patterns from excluded-files.js
+  const defaultIgnores = defaultIgnorePatterns;
+  
+  // Get patterns from excluded-files.js
+  const excludedFilesPatterns = Array.isArray(excludedFiles) ? [...excludedFiles] : [];
+  
+  // Use a Set to remove exact duplicates
+  const uniquePatterns = new Set([
+    ...defaultIgnores,
+    ...excludedFilesPatterns,
+    ...consolidatedPatterns
+  ]);
+  
+  // Convert back to array and log some stats
+  const mergedPatterns = [...uniquePatterns];
+  
+  console.log(`Merged patterns - Total: ${mergedPatterns.length}`);
+  console.log(`- Default: ${defaultIgnores.length}`);
+  console.log(`- From excluded-files.js: ${excludedFilesPatterns.length}`);
+  console.log(`- From gitignore files: ${consolidatedPatterns.length}`);
+  console.log(`- Unique after merging: ${mergedPatterns.length}`);
+  
+  return mergedPatterns;
+}
+
+// Add isValidPath function for backward compatibility
+// This should be removed when we're confident everything uses the shared module
+function _isValidPath(pathToCheck) {
+  try {
+    return isValidPath(pathToCheck);
+  } catch (err) {
+    return false;
+  }
+}
+
+// Handle directory loading cancellation
+ipcMain.on("cancel-directory-loading", (event) => {
+  console.log("Directory loading cancelled by user");
+  
+  // Set the loading flag to false to stop any ongoing operations
+  isLoadingDirectory = false;
+  isHandlingGitignore = false;
+  
+  // Clear any loading timeout
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+  
+  // Notify the renderer that the operation was cancelled
+  event.sender.send("file-processing-status", {
+    status: "cancelled",
+    message: "Operation cancelled by user",
+  });
+});
+
+// State cleanup functions
+function clearRootState(rootId) {
+  console.log(`Clearing state for root: ${rootId}`);
+  
+  // Clear gitignore cache for this root
+  const rootFolder = rootFolders.find(r => r.id === rootId);
+  if (rootFolder) {
+    gitignoreCache.delete(rootFolder.path);
+  }
+  
+  // Reset processing state if this was the last root
+  if (rootFolders.length <= 1) {
+    resetProgressCounters();
+    isLoadingDirectory = false;
+    isHandlingGitignore = false;
+  }
+  
+  // Remove from rootFolders array
+  rootFolders = rootFolders.filter(root => root.id !== rootId);
+}
+
+function clearAllState() {
+  console.log("Clearing all application state");
+  
+  // Clear all root folders
+  rootFolders = [];
+  
+  // Clear all caches
+  gitignoreCache.clear();
+  
+  // Reset all processing state
+  resetProgressCounters();
+  isLoadingDirectory = false;
+  isHandlingGitignore = false;
+  
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+}
+
+function clearCache() {
+  console.log("Clearing all caches and temporary data");
+  
+  // Clear gitignore cache
+  gitignoreCache.clear();
+  
+  // Clear any file system caches
+  if (mainWindow) {
+    mainWindow.webContents.session.clearCache();
+  }
+  
+  // Reset processing state
+  resetProgressCounters();
+  isLoadingDirectory = false;
+  isHandlingGitignore = false;
+  
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+}
+```
+</file_contents>
+
+<xml_formatting_instructions>
+### Role
+- You are a **code editing assistant**: You can fulfill edit requests and chat with the user about code or other questions. Provide complete instructions or code lines when replying with xml formatting.
+
+### Capabilities
+- Can create new files.
+- Can rewrite entire files.
+- Can perform partial search/replace modifications.
+- Can delete existing files.
+
+Avoid placeholders like `...` or `// existing code here`. Provide complete lines or code.
+
+## Tools & Actions
+1. **create** – Create a new file if it doesn’t exist.
+2. **rewrite** – Replace the entire content of an existing file.
+3. **modify** (search/replace) – For partial edits with <search> + <content>.
+4. **delete** – Remove a file entirely (empty <content>).
+
+### **Format to Follow for Repo Prompt's Diff Protocol**
+
+<Plan>
+Describe your approach or reasoning here.
+</Plan>
+
+<file path="path/to/example.swift" action="one_of_the_tools">
+  <change>
+    <description>Brief explanation of this specific change</description>
+    <search>
+===
+// Exactly matching lines to find
+===
+    </search>
+    <content>
+===
+// Provide the new or updated code here. Do not use placeholders
+===
+    </content>
+  </change>
+  <!-- Add more <change> blocks if you have multiple edits for the same file -->
+</file>
+
+#### Tools Demonstration
+1. `<file path="NewFile.swift" action="create">` – Full file in <content>
+2. `<file path="DeleteMe.swift" action="delete">` – Empty <content>
+3. `<file path="ModifyMe.swift" action="modify">` – Partial edit with `<search>` + `<content>`
+4. `<file path="RewriteMe.swift" action="rewrite">` – Entire file in <content>
+5. `<file path="RewriteMe.swift" action="rewrite">` – Entire file in <content>. No <search> required.
+
+## Format Guidelines
+1. **Plan**: Begin with a `<Plan>` block explaining your approach.
+2. **<file> Tag**: e.g. `<file path="Models/User.swift" action="...">`. Must match an available tool.
+3. **<change> Tag**: Provide `<description>` to clarify each change. Then `<content>` for new/modified code. Additional rules depend on your capabilities.
+4. **modify**: **<search> & <content>**: Provide code blocks enclosed by ===. Respect indentation exactly, ensuring the <search> block matches the original source down to braces, spacing, and any comments. The new <content> will replace the <search> block, and should should fit perfectly in the space left by it's removal.
+5. **modify**: For changes to the same file, ensure that you use multiple change blocks, rather than separate file blocks.
+6. **rewrite**: For large overhauls; omit `<search>` and put the entire file in `<content>`.
+7. **create**: For new files, put the full file in <content>.
+8. **delete**: Provide an empty <content>. The file is removed.
+
+## Code Examples
+
+-----
+### Example: Search and Replace (Add email property)
+<Plan>
+Add an email property to `User` via search/replace.
+</Plan>
+
+<file path="Models/User.swift" action="modify">
+  <change>
+    <description>Add email property to User struct</description>
+    <search>
+===
+struct User {
+    let id: UUID
+    var name: String
+}
+===
+    </search>
+    <content>
+===
+struct User {
+    let id: UUID
+    var name: String
+    var email: String
+}
+===
+    </content>
+  </change>
+</file>
+
+-----
+### Example: Negative Example - Mismatched Search Block
+// Example Input (not part of final output, just demonstration)
+<file_contents>
+File: path/service.swift
+```
+import Foundation
+class Example {
+    foo() {
+        Bar()
+    }
+}
+```
+</file_contents>
+
+<Plan>
+Demonstrate how a mismatched search block leads to failed merges.
+</Plan>
+
+<file path="path/service.swift" action="modify">
+  <change>
+    <description>This search block is missing or has mismatched indentation, braces, etc.</description>
+    <search>
+===
+    foo() {
+        Bar()
+    }
+===
+    </search>
+    <content>
+===
+    foo() {
+        Bar()
+        Bar2()
+    }
+===
+    </content>
+  </change>
+</file>
+
+<!-- This example fails because the <search> block doesn't exactly match the original file contents. -->
+
+-----
+### Example: Negative Example - Mismatched Brace Balance
+// This negative example shows how adding extra braces in the <content> can break brace matching.
+<Plan>
+Demonstrate that the new content block has one extra closing brace, causing mismatched braces.
+</Plan>
+
+<file path="Functions/MismatchedBracesExample.swift" action="modify">
+  <change>
+    <description>Mismatched brace balance in the replacement content</description>
+    <search>
+===
+    foo() {
+        Bar()
+    }
+===
+    </search>
+    <content>
+===
+    foo() {
+        Bar()
+    }
+
+    bar() {
+        foo2()
+    }
+}
+===
+    </content>
+  </change>
+</file>
+
+<!-- Because the <search> block was only a small brace segment, adding extra braces in <content> breaks the balance. -->
+
+-----
+### Example: Negative Example - One-Line Search Block
+<Plan>
+Demonstrate a one-line search block, which is too short to be reliable.
+</Plan>
+
+<file path="path/service.swift" action="modify">
+  <change>
+    <description>One-line search block is ambiguous</description>
+    <search>
+===
+var email: String
+===
+    </search>
+    <content>
+===
+var emailNew: String
+===
+    </content>
+  </change>
+</file>
+
+<!-- This example fails because the <search> block is only one line and ambiguous. -->
+
+-----
+### Example: Negative Example - Ambiguous Search Block
+<Plan>
+Demonstrate an ambiguous search block that can match multiple blocks (e.g., multiple closing braces).
+</Plan>
+
+<file path="path/service.swift" action="modify">
+  <change>
+    <description>Ambiguous search block with multiple closing braces</description>
+    <search>
+===
+    }
+}
+===
+    </search>
+    <content>
+===
+        foo() {
+        }
+    }
+}
+===
+    </content>
+  </change>
+</file>
+
+<!-- This example fails because the <search> block is ambiguous due to multiple matching closing braces. -->
+
+-----
+### Example: Full File Rewrite
+<Plan>
+Rewrite the entire User file to include an email property.
+</Plan>
+
+<file path="Models/User.swift" action="rewrite">
+  <change>
+    <description>Full file rewrite with new email field</description>
+    <content>
+===
+import Foundation
+struct User {
+    let id: UUID
+    var name: String
+    var email: String
+
+    init(name: String, email: String) {
+        self.id = UUID()
+        self.name = name
+        self.email = email
+    }
+}
+===
+    </content>
+  </change>
+</file>
+
+-----
+### Example: Create New File
+<Plan>
+Create a new RoundedButton for a custom Swift UIButton subclass.
+</Plan>
+
+<file path="Views/RoundedButton.swift" action="create">
+  <change>
+    <description>Create custom RoundedButton class</description>
+    <content>
+===
+import UIKit
+@IBDesignable
+class RoundedButton: UIButton {
+    @IBInspectable var cornerRadius: CGFloat = 0
+}
+===
+    </content>
+  </change>
+</file>
+
+-----
+### Example: Delete a File
+<Plan>
+Remove an obsolete file.
+</Plan>
+
+<file path="Obsolete/File.swift" action="delete">
+  <change>
+    <description>Completely remove the file from the project</description>
+    <content>
+===
+===
+    </content>
+  </change>
+</file>
+
+## Final Notes
+1. **modify** Always wrap the exact original lines in <search> and your updated lines in <content>, each enclosed by ===.
+2. **modify** The <search> block must match the source code exactly—down to indentation, braces, spacing, and any comments. Even a minor mismatch causes failed merges.
+3. **modify** Only replace exactly what you need. Avoid including entire functions or files if only a small snippet changes, and ensure the <search> content is unique and easy to identify.
+4. **rewrite** Use `rewrite` for major overhauls, and `modify` for smaller, localized edits. Rewrite requires the entire code to be replaced, so use it sparingly.
+5. You can always **create** new files and **delete** existing files. Provide full code for create, and empty content for delete. Avoid creating files you know exist already.
+6. If a file tree is provided, place your files logically within that structure. Respect the user’s relative or absolute paths.
+7. Wrap your final output in ```XML ... ``` for clarity.
+8. **Important:** Do not wrap any XML output in CDATA tags (i.e. `<![CDATA[ ... ]]>`). Repo Prompt expects raw XML exactly as shown in the examples.
+9. **IMPORTANT** IF MAKING FILE CHANGES, YOU MUST USE THE AVAILABLE XML FORMATTING CAPABILITIES PROVIDED ABOVE - IT IS THE ONLY WAY FOR YOUR CHANGES TO BE APPLIED.
+10. The final output must apply cleanly with no leftover syntax errors.
+</xml_formatting_instructions>
+
+<user_instructions>
+Fix the issues in main.js
+</user_instructions>

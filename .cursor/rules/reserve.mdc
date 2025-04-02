@@ -1,0 +1,77 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: "Development Guidelines and Preservation Rules"
+globs:
+alwaysApply: true
+---
+
+# Development Guidelines and Preservation Rules
+
+## UI/UX Guidelines
+- Preserve current UI design patterns unless explicitly requested for changes
+- Maintain consistent user experience across all features
+- Follow existing design system and component patterns
+- Ensure accessibility standards are maintained
+
+## Code Architecture
+- Preserve existing functionality and logic unless improvements are required
+- Integrate new features seamlessly with current implementation
+- Follow modular design principles
+- Maintain separation of concerns
+
+## Cross-Platform Compatibility
+- Ensure cross-compatibility between Windows, Linux, and Mac
+- Focus on path normalization using platform-agnostic approaches
+- Use path utilities from `utils/*` or `shared/*` modules
+- Test functionality across different operating systems
+
+## Debugging and Logging
+- Implement comprehensive debugging and logging for critical code paths
+- Use console logging for development debugging
+- Add informative error messages and stack traces
+- Structure logs for easy troubleshooting
+
+## Testing Strategy
+- Create unit tests after implementation is stable
+- Follow Test-Driven Development (TDD) when appropriate
+- Ensure test coverage for critical functionality
+- Include edge cases and error scenarios in tests
+
+## Documentation
+- Document all new implementations in markdown
+- Track progress in `docs/*` directory
+- Create new documentation files when needed
+- Include:
+  - Feature overview
+  - Implementation details
+  - Usage examples
+  - Dependencies
+  - Testing procedures
+
+## Version Control
+- Write clear, descriptive commit messages
+- Keep changes focused and atomic
+- Document breaking changes
+- Update relevant documentation with code changes
+
+## Code Quality
+- Follow established code style and formatting
+- Keep functions and methods focused and concise
+- Use meaningful variable and function names
+- Add comments for complex logic
+
+## Final Checklist
+- Verify all tests pass
+- Confirm cross-platform compatibility
+- Update documentation
+- Document implementation details in chat
+- Review code for potential improvements

@@ -5,7 +5,7 @@
 
 A modern file viewer application for developers to easily navigate, search, and copy code from repositories. Ideal for pasting into ChatGPT or your LLM of choice. Built with Electron, React, and TypeScript.
 
-![PasteMax Screenshot](https://github.com/user-attachments/assets/4115ad31-9c93-4cf8-bd65-4bb5379e0eba)
+![PasteMax](https://github.com/user-attachments/assets/7160e35a-a0d5-4519-bc84-8035e3aa3f92)
 
 ## Video
 [YouTube Link](https://youtu.be/YV-pZSDNnPo)
@@ -45,7 +45,7 @@ npm install
 3. Build the app:
 
 ```
-npm run build-electron
+npm run build:electron
 npm run package
 ```
 
@@ -93,7 +93,7 @@ To build the application for production:
 
 ```
 # Build the React app with Vite and update paths for Electron
-npm run build-electron
+npm run build:electron
 
 # Create platform-specific distributables
 npm run package
@@ -152,7 +152,7 @@ This is caused by dependencies not being properly included in the package. To fi
 2. Rebuild the application:
 
    ```
-   npm run build-electron && npm run package
+   npm run build:electron && npm run package
    ```
 
 3. Install the new version

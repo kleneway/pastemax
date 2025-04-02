@@ -1,0 +1,85 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: "Technical Stack and Development Standards"
+globs:
+alwaysApply: true
+---
+
+# Technical Stack and Development Standards
+
+## Core Technologies
+- Electron-based desktop application
+- Backend: JavaScript (Node.js)
+- Frontend: TypeScript + React
+- Build System: Electron Builder
+
+## Architecture Overview
+- Main Process (Backend)
+  - JavaScript-based core functionality
+  - Node.js native modules integration
+  - IPC communication handling
+  - System-level operations
+
+- Renderer Process (Frontend)
+  - TypeScript for type safety
+  - React for UI components
+  - State management (specify your preferred solution)
+  - Modern ES6+ features
+
+## Development Environment
+- Separate development and production configurations
+- Development entry: `dev.js`
+- Production build: `build.js`
+- Environment-specific variables in respective config files
+- Hot-reload support for development
+
+## Code Organization
+- Modular architecture
+- Maximum file size: 200-300 lines
+- Clear separation of concerns
+- Feature-based directory structure
+- Shared utilities and components
+
+## Testing Framework
+- Unit tests for all new features
+- Integration tests for critical paths
+- Test coverage requirements
+- Testing utilities and helpers
+- Mocking strategies
+
+## Build and Deployment
+- Manual build process oversight
+- Environment-specific builds
+- Code signing and packaging
+- Release management
+- Update distribution
+
+## Code Quality Standards
+- TypeScript strict mode
+- ESLint configuration
+- Prettier formatting
+- Code review requirements
+- Performance benchmarks
+
+## Development Workflow
+- Feature branch workflow
+- Code review process
+- Testing requirements
+- Documentation updates
+- Manual build verification
+
+## Performance Considerations
+- Memory management
+- IPC communication optimization
+- Resource loading strategies
+- Caching mechanisms
+- Bundle size optimization

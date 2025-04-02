@@ -1,13 +1,14 @@
 {
   "name": "pastemax",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "vite",
     "dev:electron": "node dev.js",
     "build": "vite build",
-    "build-electron": "node build.js",
+    "build:electron": "node build.js",
+    "clean": "rimraf dist release-builds node_modules",
     "verify-build": "node scripts/verify-build.js",
     "test-build": "node scripts/test-local-build.js",
     "test-build:mac": "node scripts/test-local-build.js mac",
@@ -99,6 +100,7 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "rimraf": "^5.0.10",
     "typescript": "^5.3.3",
     "vite": "^5.0.8"
   },
