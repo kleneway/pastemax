@@ -49,7 +49,10 @@ contextBridge.exposeInMainWorld("electron", {
       "folder-selected",
       "file-list-data",
       "file-processing-status",
-      "startup-mode"
+      "startup-mode",
+      "file-added",
+      "file-updated",
+      "file-removed"
     ];
     if (validChannels.includes(channel)) {
       // Remove any existing listeners to avoid duplicates
@@ -83,7 +86,10 @@ contextBridge.exposeInMainWorld("electron", {
         "folder-selected",
         "file-list-data",
         "file-processing-status",
-        "startup-mode"
+        "startup-mode",
+        "file-added",
+        "file-updated",
+        "file-removed"
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeListener(channel, (event, ...args) => func(...args));

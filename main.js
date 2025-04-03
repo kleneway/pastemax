@@ -6,6 +6,7 @@ const os = require("os");
 // Global variables for directory loading control
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
+let currentWatcher = null;
 const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
 
 /**
@@ -113,6 +114,17 @@ try {
 
 // Initialize tokenizer with better error handling
 let tiktoken;
+
+// Initialize chokidar for file watching
+let chokidar;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  chokidar = require('chokidar');
+  console.log("Successfully loaded chokidar module");
+} catch (err) {
+  console.error("Failed to load chokidar module:", err);
+  chokidar = null; // Set to null if loading fails
+}
 try {
   tiktoken = require("tiktoken");
   console.log("Successfully loaded tiktoken module");
@@ -234,6 +246,9 @@ function createWindow() {
   // Clean up shortcuts when window is closed
   mainWindow.on('closed', () => {
     globalShortcut.unregisterAll();
+    if (currentWatcher) {
+      currentWatcher.close().then(() => console.log('File watcher closed.'));
+    }
   });
 
   // Load the index.html file
@@ -242,6 +257,87 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, "dist", "index.html"));
+  }
+}
+
+/**
+ * Processes a single file: reads stats, content, counts tokens, and checks ignore rules.
+ * Used by both initial scan and live file watching.
+ * @param {string} fullPath - Absolute path to the file.
+ * @param {string} rootDir - Root directory for relative path calculation.
+ * @param {object} ignoreFilter - The ignore filter instance.
+ * @returns {Promise<object|null>} File data object or null if ignored/error.
+ */
+async function processSingleFile(fullPath, rootDir, ignoreFilter) {
+  console.log(`Processing file: ${fullPath}`);
+  try {
+    // Ensure paths are absolute and normalized
+    fullPath = ensureAbsolutePath(fullPath);
+    rootDir = ensureAbsolutePath(rootDir);
+
+    // Calculate relative path safely
+    const relativePath = safeRelativePath(rootDir, fullPath);
+
+    // Skip if invalid path or outside root
+    if (!isValidPath(relativePath) || relativePath.startsWith('..')) {
+      console.log('Skipping file outside root:', fullPath);
+      return null;
+    }
+
+    // Check ignore rules
+    if (ignoreFilter.ignores(relativePath)) {
+      return null;
+    }
+
+    const stats = await fs.promises.stat(fullPath);
+    const fileData = {
+      name: path.basename(fullPath),
+      path: normalizePath(fullPath),
+      relativePath: relativePath,
+      size: stats.size,
+      isBinary: false,
+      isSkipped: false,
+      content: "",
+      tokenCount: 0,
+      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir)
+    };
+
+    // Handle binary, large files, read content and count tokens
+    if (stats.size > MAX_FILE_SIZE) {
+      fileData.isSkipped = true;
+      fileData.error = "File too large to process";
+      return fileData;
+    }
+
+    // Check if file is binary
+    const ext = path.extname(fullPath).substring(1).toLowerCase();
+    if (binaryExtensions.includes(ext)) {
+      fileData.isBinary = true;
+      fileData.fileType = ext.toUpperCase();
+      return fileData;
+    }
+
+    // Read file content
+    const content = await fs.promises.readFile(fullPath, "utf8");
+    fileData.content = content;
+    fileData.tokenCount = countTokens(content);
+
+    return fileData;
+  } catch (err) {
+    console.error(`Error processing single file ${fullPath}:`, err);
+    // Return a skipped object on error to inform the UI
+    return {
+      name: path.basename(fullPath),
+      path: normalizePath(fullPath),
+      relativePath: safeRelativePath(rootDir, fullPath),
+      size: 0,
+      isBinary: false, // Assume not binary on error
+      isSkipped: true,
+      error: `Error: ${err.message}`,
+      content: "",
+      tokenCount: 0,
+      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir)
+    };
   }
 }
 
@@ -255,6 +351,9 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
+    if (currentWatcher) {
+      currentWatcher.close().then(() => console.log('File watcher closed before quit.'));
+    }
     app.quit();
   }
 });
@@ -535,13 +634,21 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
   // Prevent processing if already loading
   if (isLoadingDirectory) {
     console.log("Already processing a directory, cancelling previous operation");
+    if (currentWatcher) {
+      await currentWatcher.close();
+      currentWatcher = null;
+    }
     cancelDirectoryLoading(BrowserWindow.fromWebContents(event.sender));
     // Wait a bit before starting new operation
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   try {
-    // Set the loading flag first to prevent race conditions
+    // Close previous watcher if it exists
+    if (currentWatcher) {
+      await currentWatcher.close();
+      currentWatcher = null;
+    }
     isLoadingDirectory = true;
 
     // Set up the timeout for directory loading
@@ -554,7 +661,9 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     });
 
     // Process files with async/await
-    const files = await readFilesRecursively(folderPath, folderPath, null, BrowserWindow.fromWebContents(event.sender));
+    const rootDir = ensureAbsolutePath(folderPath);
+    const ignoreFilter = loadGitignore(rootDir);
+    const files = await readFilesRecursively(rootDir, rootDir, ignoreFilter, BrowserWindow.fromWebContents(event.sender));
     
     // If loading was cancelled, return early
     if (!isLoadingDirectory) {
@@ -591,6 +700,88 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     }));
 
     event.sender.send("file-list-data", serializedFiles);
+
+    // Start the file watcher only if chokidar loaded successfully
+    if (chokidar) {
+      console.log(`Starting file watcher for: ${rootDir}`);
+      currentWatcher = chokidar.watch(rootDir, {
+        ignored: (filePath) => {
+          const absolutePath = ensureAbsolutePath(filePath);
+          let relative = ''; // Initialize relative path
+
+          try {
+            relative = safeRelativePath(rootDir, absolutePath);
+          } catch (err) {
+            console.error(`Error calculating relative path for ${absolutePath} from ${rootDir}:`, err);
+            return true; // Ignore if path calculation fails
+          }
+
+          // If relative path is empty, it's the root dir itself.
+          // Don't pass empty string to ignores(). The root itself shouldn't be ignored by rules.
+          if (relative === '') {
+            return false; // Don't ignore the root directory based on patterns
+          }
+
+          const isInvalidOrOutside = !isValidPath(relative) || relative.startsWith('..');
+          let isIgnoredByRules = false;
+
+          if (!isInvalidOrOutside) {
+            try {
+              // Ensure ignoreFilter exists before calling ignores
+              if (ignoreFilter && typeof ignoreFilter.ignores === 'function') {
+                 isIgnoredByRules = ignoreFilter.ignores(relative); // 'relative' is guaranteed not empty here
+              } else {
+                 console.warn('ignoreFilter or ignoreFilter.ignores is not available.');
+                 return true;
+              }
+            } catch(err) {
+               console.error(`Error checking ignore rules for relative path '${relative}':`, err);
+               return true; // Ignore if rules check fails
+            }
+          }
+
+          const isIgnored = isInvalidOrOutside || isIgnoredByRules;
+          return isIgnored;
+        },
+        ignoreInitial: true,
+        persistent: true,
+        awaitWriteFinish: {
+          stabilityThreshold: 500,
+          pollInterval: 100
+        },
+        depth: 99
+      });
+
+      currentWatcher
+        .on('add', async (filePath) => {
+          const normalizedPath = normalizePath(filePath);
+          console.log(`<<< CHOKIDAR EVENT: add - ${normalizedPath} >>>`);
+          const fileData = await processSingleFile(normalizedPath, rootDir, ignoreFilter);
+          if (fileData) { // Send update even if skipped
+            console.log(`[Watcher Sending IPC] file-added for ${normalizedPath}`);
+            event.sender.send('file-added', fileData);
+          }
+        })
+        .on('change', async (filePath) => {
+          const normalizedPath = normalizePath(filePath);
+          console.log(`<<< CHOKIDAR EVENT: change - ${normalizedPath} >>>`);
+          const fileData = await processSingleFile(normalizedPath, rootDir, ignoreFilter);
+          if (fileData) { // Send update even if skipped
+            event.sender.send('file-updated', fileData);
+          }
+        })
+        .on('unlink', (filePath) => {
+          const normalizedPath = normalizePath(filePath);
+          console.log(`<<< CHOKIDAR EVENT: unlink - ${normalizedPath} >>>`);
+          event.sender.send('file-removed', normalizedPath);
+        })
+        .on('error', (error) => {
+          console.error(`<<< CHOKIDAR ERROR: ${error} >>>`);
+        })
+        .on('ready', () => console.log('Initial scan complete. File watcher is ready.'));
+    } else {
+      console.warn("Chokidar module not available, live file watching disabled.");
+    }
   } catch (err) {
     console.error("Error processing file list:", err);
     isLoadingDirectory = false;

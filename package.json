@@ -78,7 +78,8 @@
     "asarUnpack": [
       "node_modules/ignore/**",
       "node_modules/tiktoken/**",
-      "node_modules/gpt-3-encoder/**"
+      "node_modules/gpt-3-encoder/**",
+      "node_modules/chokidar/**"
     ],
     "asar": true,
     "afterSign": "scripts/notarize.js",
@@ -103,6 +104,7 @@
     "vite": "^5.0.8"
   },
   "dependencies": {
+    "chokidar": "^3.6.0",
     "gpt-3-encoder": "^1.1.4",
     "ignore": "^7.0.3",
     "lucide-react": "^0.477.0",

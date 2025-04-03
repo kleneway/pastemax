@@ -20,6 +20,7 @@ A modern file viewer application for developers to easily navigate, search, and 
 - **Dark Mode**: Toggle between light and dark themes for comfortable viewing in any environment
 - **Binary File Detection**: Automatic detection and exclusion of binary files
 - **Smart File Exclusion**: Automatically excludes common files like package-lock.json, binary files, and more by default
+- **File Change Watcher**: Automatically updates the files whenever changes are detected
 
 ## Installation
 
@@ -124,6 +125,7 @@ Platform-specific build commands:
 - Vite - Build tool and development server
 - tiktoken - Token counting for LLM context estimation
 - ignore - .gitignore-style pattern matching for file exclusions
+- chokidar - File Watcher
 
 ## Customization
 
