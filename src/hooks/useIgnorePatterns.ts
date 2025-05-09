@@ -50,13 +50,6 @@ export function useIgnorePatterns(selectedFolder: string | null, isElectron: boo
     return localStorage.getItem('pastemax-ignore-settings-modified') === 'true';
   });
 
-  const resetIgnoreSettingsModified = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pastemax-ignore-settings-modified', 'false');
-    }
-    _setIgnoreSettingsModified(false);
-  }, [_setIgnoreSettingsModified]);
-
   const setIgnoreMode = (mode: IgnoreMode) => {
     if (typeof window !== 'undefined') {
       if (isElectron) {
@@ -161,6 +154,13 @@ export function useIgnorePatterns(selectedFolder: string | null, isElectron: boo
     } finally {
       console.timeEnd('handleViewIgnorePatterns');
     }
+  };
+
+  const resetIgnoreSettingsModified = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pastemax-ignore-settings-modified', 'false');
+    }
+    _setIgnoreSettingsModified(false);
   };
 
   // Close the ignore patterns viewer

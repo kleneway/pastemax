@@ -243,9 +243,6 @@ if (!ipcMain.eventNames().includes('set-ignore-mode')) {
 ipcMain.on('request-file-list', async (event, payload) => {
   console.log('Received request-file-list payload:', payload); // Log the entire payload
 
-  // Always clear file caches before scanning
-  clearFileCaches();
-
   if (isLoadingDirectory) {
     console.log('Already processing a directory, ignoring new request for:', payload);
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -303,10 +300,7 @@ ipcMain.on('request-file-list', async (event, payload) => {
       BrowserWindow.fromWebContents(event.sender),
       currentProgress,
       payload.folderPath, // currentDir is also the same for top-level
-      payload?.ignoreMode ?? currentIgnoreMode,
-      null, // fileQueue
-      watcher.shutdownWatcher,
-      watcher.initializeWatcher
+      payload?.ignoreMode ?? currentIgnoreMode
     );
 
     if (!isLoadingDirectory) {
@@ -355,25 +349,6 @@ ipcMain.on('request-file-list', async (event, payload) => {
       });
 
     event.sender.send('file-list-data', serializedFiles);
-
-    // After sending file-list-data, start watcher for the root folder
-    // Use the same ignoreFilter as used for the scan
-    // Pass rootDir as payload.folderPath
-    watcher.initializeWatcher(
-      payload.folderPath, // rootDir
-      BrowserWindow.fromWebContents(event.sender),
-      ignoreFilter,
-      // For defaultIgnoreFilterInstance, use the system default filter
-      require('./ignore-manager.js').systemDefaultFilter,
-      // processSingleFileCallback
-      (filePath, rootDirCb, ignoreFilterCb) =>
-        require('./file-processor.js').processSingleFile(
-          filePath,
-          payload.folderPath,
-          ignoreFilter,
-          payload?.ignoreMode ?? currentIgnoreMode
-        )
-    );
   } catch (err) {
     console.error('Error processing file list:', err);
     stopFileProcessing(); // Stop file processor state

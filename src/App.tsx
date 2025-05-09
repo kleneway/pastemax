@@ -120,7 +120,6 @@ const App = (): JSX.Element => {
 
   /* ============================== STATE: User Instructions ============================== */
   const [userInstructions, setUserInstructions] = useState('');
-  const [reloadTrigger, setReloadTrigger] = useState(0); // For triggering data re-fetch
 
   // Utility function to clear all saved state and reset the app
   const clearSavedState = useCallback(() => {
@@ -254,58 +253,35 @@ const App = (): JSX.Element => {
 
   // Simplified useEffect for loading initial data
   useEffect(() => {
-    if (!isElectron || !selectedFolder || isSafeMode) {
+    if (!isElectron || !selectedFolder || isSafeMode) return;
+
+    // Only run if we're not already processing
+    if (processingStatus.status === 'processing') {
+      console.log('[useEffect] Skipping - already processing');
       return;
     }
 
-    console.log(`[useEffect triggered] Folder: ${selectedFolder}, ReloadTrigger: ${reloadTrigger}, IgnoreModified: ${ignoreSettingsModified}`);
-
-    // Set status to processing *before* the timeout to give immediate feedback
-    // Determine if this is a refresh of the currently loaded folder or an initial load/different folder load
-    const isRefreshingCurrentFolder = reloadTrigger > 0 && 
-                                    typeof window !== 'undefined' && 
-                                    selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
-
+    console.log('[useEffect] Loading folder:', selectedFolder);
     setProcessingStatus({
       status: 'processing',
-      message: isRefreshingCurrentFolder
-                 ? 'Refreshing file list...'
-                 : 'Loading files...',
+      message: 'Loading files...',
     });
 
     const timer = setTimeout(() => {
-      console.log('[useEffect] Sending request-file-list with payload:', {
+      console.log('[useEffect] Sending request-file-list after debounce');
+      window.electron.ipcRenderer.send('request-file-list', {
         folderPath: selectedFolder,
         ignoreMode,
         customIgnores,
         ignoreSettingsModified,
       });
-      window.electron.ipcRenderer.send('request-file-list', {
-        folderPath: selectedFolder,
-        ignoreMode,
-        customIgnores,
-        ignoreSettingsModified, // Send the current state
-      });
-      // Reset ignoreSettingsModified *after* sending the request that uses it.
-      if (ignoreSettingsModified) {
-        resetIgnoreSettingsModified();
-      }
     }, 300); // 300ms debounce
 
     return () => {
       clearTimeout(timer);
-      console.log('[useEffect] Cleanup - canceling pending request-file-list timer');
+      console.log('[useEffect] Cleanup - canceling pending request');
     };
-  }, [
-    selectedFolder,
-    isElectron,
-    isSafeMode,
-    ignoreMode,
-    customIgnores,
-    ignoreSettingsModified,
-    reloadTrigger,
-    resetIgnoreSettingsModified,
-  ]);
+  }, [selectedFolder, isSafeMode]); // Only depend on these core states (Leave it as is)
 
   // Memoize event handlers to maintain reference equality
   const handleFolderSelected = useCallback(
@@ -580,59 +556,58 @@ const App = (): JSX.Element => {
     if (!isElectron) return;
 
     const handleFileAdded = (newFile: FileData) => {
-      console.log('<<< IPC Event Received: file-added >>> Data:', JSON.stringify(newFile));
       if (newFile.isBinary && !includeBinaryPaths) {
-        console.log('[Renderer][file-added] Skipping binary file as includeBinaryPaths is false:', newFile.path);
         return; // skip auto-selecting binary
       }
-      console.log('[Renderer][IPC] Received file-added:', newFile);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('<<< IPC RECEIVED: file-added >>>', newFile);
+      }
       setAllFiles((prevFiles: FileData[]) => {
         // Avoid duplicates
         if (prevFiles.some((f: FileData) => arePathsEqual(f.path, newFile.path))) {
           console.log('[State Update] File already exists, ignoring:', newFile.path);
           return prevFiles;
         }
-        // applyFiltersAndSort will be triggered by the useEffect watching allFiles
-        return [...prevFiles, newFile];
+        const updatedFiles = [...prevFiles, newFile];
+        applyFiltersAndSort(updatedFiles, sortOrder, searchTerm);
+        return updatedFiles;
       });
       // Optionally auto-select the new file if it meets criteria
       if (!newFile.isSkipped && !newFile.excludedByDefault) {
         setSelectedFiles((prev: string[]) => [...prev, normalizePath(newFile.path)]);
       }
-      // setSelectedFiles((prev: string[]) => [...prev, normalizePath(newFile.path)]); // Removed auto-selection for now
-      // The UI will update based on allFiles change via applyFiltersAndSort
+      // Debounce reload to prevent excessive refreshes
+      setTimeout(() => window.location.reload(), 800);
     };
 
     const handleFileUpdated = (updatedFile: FileData) => {
-      console.log('<<< IPC Event Received: file-updated >>> Data:', JSON.stringify(updatedFile));
-      console.log('[Renderer][IPC] Received file-updated:', updatedFile);
+      console.log('<<< IPC RECEIVED: file-updated >>>', updatedFile);
       setAllFiles((prevFiles: FileData[]) => {
-        // applyFiltersAndSort will be triggered by the useEffect watching allFiles
-        return prevFiles.map((file: FileData) =>
+        const updatedFiles = prevFiles.map((file: FileData) =>
           arePathsEqual(file.path, updatedFile.path) ? updatedFile : file
         );
+        applyFiltersAndSort(updatedFiles, sortOrder, searchTerm);
+        return updatedFiles;
       });
-      // The UI will update based on allFiles change via applyFiltersAndSort
+      // Debounce reload to prevent excessive refreshes
+      setTimeout(() => window.location.reload(), 800);
     };
 
-    const handleFileRemoved = (filePathData: { path: string; relativePath: string } | string) => {
-      // filePath from IPC for 'file-removed' can be an object { path: string, relativePath: string } or just a string
-      const pathToRemove = typeof filePathData === 'object' && filePathData !== null && 'path' in filePathData
-        ? filePathData.path
-        : filePathData as string;
-      console.log('<<< IPC Event Received: file-removed >>> Data:', JSON.stringify(filePathData));
-      console.log('[Renderer][IPC] Received file-removed, path to remove:', pathToRemove);
-      const normalizedPath = normalizePath(pathToRemove);
+    const handleFileRemoved = (filePath: string) => {
+      console.log('<<< IPC RECEIVED: file-removed >>>', filePath);
+      const normalizedPath = normalizePath(filePath);
       setAllFiles((prevFiles: FileData[]) => {
-        // applyFiltersAndSort will be triggered by the useEffect watching allFiles
-        return prevFiles.filter(
+        const updatedFiles = prevFiles.filter(
           (file: FileData) => !arePathsEqual(file.path, normalizedPath)
         );
+        applyFiltersAndSort(updatedFiles, sortOrder, searchTerm);
+        return updatedFiles;
       });
       setSelectedFiles((prevSelected: string[]) =>
         prevSelected.filter((path: string) => !arePathsEqual(path, normalizedPath))
       );
-      // The UI will update based on allFiles change via applyFiltersAndSort
+      // Debounce reload to prevent excessive refreshes
+      setTimeout(() => window.location.reload(), 800);
     };
 
     window.electron.ipcRenderer.on('file-added', handleFileAdded);
@@ -641,10 +616,10 @@ const App = (): JSX.Element => {
 
     return () => {
       window.electron.ipcRenderer.removeListener('file-added', handleFileAdded);
-    window.electron.ipcRenderer.removeListener('file-updated', handleFileUpdated);
-    window.electron.ipcRenderer.removeListener('file-removed', handleFileRemoved);
+      window.electron.ipcRenderer.removeListener('file-updated', handleFileUpdated);
+      window.electron.ipcRenderer.removeListener('file-removed', handleFileRemoved);
     };
-  }, [isElectron, sortOrder, searchTerm, applyFiltersAndSort, includeBinaryPaths]);
+  }, [isElectron, sortOrder, searchTerm, applyFiltersAndSort]);
 
   // Toggle file selection
   const toggleFileSelection = (filePath: string) => {
@@ -892,22 +867,6 @@ const App = (): JSX.Element => {
                 title="Clear all saved data and start fresh"
               >
                 Clear All
-              </button>
-              <button
-                className="refresh-list-btn" // Add a new class for styling
-                onClick={() => {
-                  if (selectedFolder) { // Only refresh if a folder is selected
-                    console.log('[Refresh Button] Clicked, selectedFolder:', selectedFolder);
-                    // DO NOT setProcessingStatus here. Let the useEffect handle it.
-                    setReloadTrigger((prev: number) => prev + 1);
-                  } else {
-                    console.log('[Refresh Button] Clicked, but no folder selected.');
-                  }
-                }}
-                disabled={processingStatus.status === 'processing' || !selectedFolder}
-                title="Refresh the current file list"
-              >
-                Refresh
               </button>
               <ViewIgnoresButton onClick={handleViewIgnorePatterns} />
             </div>

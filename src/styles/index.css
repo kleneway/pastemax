@@ -496,14 +496,6 @@ input[type='checkbox'][disabled] {
   padding-right: var(--space-sm);
 }
 
-.select-folder-btn,
-.clear-data-btn,
-.refresh-list-btn { /* Added refresh-list-btn here */
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-size-sm);
-  /* Add any other shared styles for these buttons */
-}
-
 .folder-info {
   display: flex;
   align-items: center;
