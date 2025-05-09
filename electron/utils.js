@@ -50,6 +50,59 @@ function isValidPath(pathToCheck) {
   }
 }
 
+// ==========================
+// FILE PROCESSING UTILITIES
+// ==========================
+
+// async function processSingleFile(fullPath, rootDir, ignoreFilter) {
+//   fullPath = ensureAbsolutePath(fullPath);
+//   rootDir = ensureAbsolutePath(rootDir);
+
+//   const relativePath = safeRelativePath(rootDir, fullPath);
+//   const stats = await fs.stat(fullPath);
+//   const isBinary = isBinaryFile(fullPath);
+//   const shouldIgnore = ignoreFilter.ignores(relativePath);
+
+//   if (shouldIgnore) {
+//     return null;
+//   }
+
+//   let content = '';
+//   let tokenCount = 0;
+//   let error = null;
+
+//   try {
+//     if (!isBinary) {
+//       content = await fs.readFile(fullPath, 'utf8');
+//       tokenCount = countTokens(content);
+//     }
+//   } catch (err) {
+//     error = err.message;
+//   }
+
+//   return {
+//     path: fullPath,
+//     relativePath,
+//     name: path.basename(fullPath),
+//     size: stats.size,
+//     modified: stats.mtime.getTime(),
+//     isBinary,
+//     content,
+//     tokenCount,
+//     error
+//   };
+// }
+
+// function isBinaryFile(filePath) {
+//   const ext = path.extname(filePath).toLowerCase();
+//   return binaryExtensions.includes(ext);
+// }
+
+// function countTokens(text) {
+//   if (!text) return 0;
+//   return Math.ceil(text.length / 4); // Simple fallback
+// }
+
 module.exports = {
   normalizePath,
   ensureAbsolutePath,

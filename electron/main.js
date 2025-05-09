@@ -1273,6 +1273,7 @@ function createWindow() {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
+      // Watcher cleanup is now handled by the watcher module itself
       app.quit();
     }
   });
@@ -1322,9 +1323,14 @@ app.whenReady().then(() => {
   });
 });
 
-// Exports for file processing functions
-module.exports = {
-  processSingleFile,
-  isBinaryFile,
-  countTokens
-};
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
