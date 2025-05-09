@@ -52,9 +52,9 @@ The way ignore filters are built and used differs between the two modes:
   2. Recursively scans the selected directory for `.gitignore` files.
   3. Patterns from found `.gitignore` files are added, respecting their hierarchical nature (e.g., a pattern in `./src/.gitignore` applies within `./src` and its subdirectories).
 
-  - The `loadGitignore` function in `electron/ignore-manager.js` handles the initial collection for the root, and `createAutomaticIgnoreFilter` refines this for subdirectories during recursion in `electron/file-processor.js`.
+  - The `loadGitignore` function in `electron/ignore-manager.js` handles the initial collection for the root, and `createContextualIgnoreFilter` refines this for subdirectories during recursion in `electron/file-processor.js`.
 
-- **`isPathExcludedByDefaults` (determines the `excluded` flag for UI display):**
+- **`shouldExcludeByDefault` (determines the `excluded` flag for UI display):**
 
   - In Automatic mode, a file is flagged as `excludedByDefault` if it matches `DEFAULT_PATTERNS` or certain OS-specific/reserved path checks.
   - `.gitignore` rules and `GlobalModeExclusion` do _not_ influence this specific flag in Automatic mode.
@@ -68,7 +68,7 @@ The way ignore filters are built and used differs between the two modes:
   - This is handled by the `createGlobalIgnoreFilter` function in `electron/ignore-manager.js`.
   - `.gitignore` files are _not_ read or used in this mode.
 
-- **`isPathExcludedByDefaults` (determines the `excluded` flag for UI display):**
+- **`shouldExcludeByDefault` (determines the `excluded` flag for UI display):**
 
   - In Global mode, a file is flagged as `excludedByDefault` if it matches `DEFAULT_PATTERNS`, `GlobalModeExclusion`, or OS-specific/reserved path checks.
   - `customIgnores` do _not_ influence this specific flag (though they do affect actual filtering).
@@ -81,9 +81,9 @@ The way ignore filters are built and used differs between the two modes:
   - `defaultIgnoreFilter`: Pre-compiled `ignore` instance for `DEFAULT_PATTERNS`.
   - `loadGitignore()`: Builds the main ignore filter for Automatic Mode.
   - `createGlobalIgnoreFilter()`: Builds the main ignore filter for Global Mode.
-  - `createAutomaticIgnoreFilter()`: Refines ignore filters for subdirectories in Automatic Mode.
-  - `isPathExcludedByDefaults()`: Determines the UI `excluded` flag based on mode.
-  - `isPathIgnoredByActiveFilter()`: Checks if a path should be ignored by a given filter instance.
+  - `createContextualIgnoreFilter()`: Refines ignore filters for subdirectories in Automatic Mode.
+  - `shouldExcludeByDefault()`: Determines the UI `excluded` flag based on mode.
+  - `shouldIgnorePath()`: Checks if a path should be ignored by a given filter instance.
 
 - **`electron/main.js`:**
 
@@ -92,7 +92,7 @@ The way ignore filters are built and used differs between the two modes:
 
 - **`electron/file-processor.js`:**
 
-  - `processDirectory()`: In Automatic mode, calls `createAutomaticIgnoreFilter` to get the correct filter for the current subdirectory.
+  - `processDirectory()`: In Automatic mode, calls `createContextualIgnoreFilter` to get the correct filter for the current subdirectory.
   - `readFilesRecursively()`: Applies the determined `ignoreFilter` to files and directories.
 
 - **`src/hooks/useIgnorePatterns.ts`:**

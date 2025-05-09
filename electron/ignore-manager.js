@@ -18,26 +18,21 @@ const path = require('path');
 const ignore = require('ignore');
 
 // Global caches
-const compiledIgnoreFilterCache = new Map(); // Cache for ignore filters keyed by normalized root directory
-const rawGitignorePatternsCache = new Map(); // Cache for already found/processed gitignore files
+const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized root directory
+const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
 
 // Pre-compiled default ignore filter for early checks using the imported DEFAULT_PATTERNS
-const systemDefaultFilter = ignore().add(DEFAULT_PATTERNS);
+const defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS);
 
 /**
- * The function `isPathExcludedByDefaults` checks if a file path should be excluded based on various
- * criteria such as OS-specific checks, reserved names, default patterns, and global mode exclusions.
- * @param filePath - The `filePath` parameter represents the path of the file you want to check if it
- * is excluded by default based on certain conditions and filters.
- * @param rootDir - The `rootDir` parameter in the `isPathExcludedByDefaults` function represents the
- * root directory from which the `filePath` is being checked for exclusion based on certain criteria.
- * It is used to calculate the relative path of the `filePath` with respect to the `rootDir`.
- * @param ignoreMode - The `ignoreMode` parameter in the `isPathExcludedByDefaults` function determines
- * the mode in which the path exclusion should be applied. It can have the following values:
- * @returns The function `isPathExcludedByDefaults` returns a boolean value - `true` if the filePath is
- * excluded by defaults, and `false` if it is not excluded.
+ * The function `shouldExcludeByDefault` determines whether a file should be excluded based on various
+ * conditions including platform-specific paths and default/excluded file patterns based on mode.
+ * @param filePath - The path of the file to check.
+ * @param rootDir - The root directory for context.
+ * @param ignoreMode - The current ignore mode ('automatic' or 'global').
+ * @returns {boolean} True if the file should be excluded by default, false otherwise.
  */
-function isPathExcludedByDefaults(filePath, rootDir, ignoreMode) {
+function shouldExcludeByDefault(filePath, rootDir, ignoreMode) {
   filePath = ensureAbsolutePath(filePath);
   rootDir = ensureAbsolutePath(rootDir);
 
@@ -81,8 +76,8 @@ function isPathExcludedByDefaults(filePath, rootDir, ignoreMode) {
   }
 
   // Check against DEFAULT_PATTERNS (using the module-level defaultIgnoreFilter)
-  if (systemDefaultFilter.ignores(relativePath)) {
-    // console.log(`[isPathExcludedByDefaults] Excluded by DEFAULT_PATTERNS: ${relativePath}`);
+  if (defaultIgnoreFilter.ignores(relativePath)) {
+    // console.log(`[shouldExcludeByDefault] Excluded by DEFAULT_PATTERNS: ${relativePath}`);
     return true;
   }
 
@@ -92,7 +87,7 @@ function isPathExcludedByDefaults(filePath, rootDir, ignoreMode) {
     if (GlobalModeExclusion && GlobalModeExclusion.length > 0) {
       const globalExcludedFilesFilter = ignore().add(GlobalModeExclusion);
       if (globalExcludedFilesFilter.ignores(relativePath)) {
-        // console.log(`[isPathExcludedByDefaults] Excluded by GlobalModeExclusion (Global Mode): ${relativePath}`);
+        // console.log(`[shouldExcludeByDefault] Excluded by GlobalModeExclusion (Global Mode): ${relativePath}`);
         return true;
       }
     }
@@ -102,31 +97,41 @@ function isPathExcludedByDefaults(filePath, rootDir, ignoreMode) {
 }
 
 /**
- * The function `isPathIgnoredByActiveFilter` determines if a file path should be ignored based on
- * specified filters.
- * @param filePath - The `filePath` parameter represents the full path of the file you want to check if
- * it is ignored by the active filter.
- * @param rootDir - The `rootDir` parameter is the root directory against which the file path is being
- * checked for being ignored by the active filter.
- * @param ignoreFilter - The `ignoreFilter` parameter is a filter that contains patterns to ignore
- * specific file paths. These patterns are expected to be normalized to be relative to the `rootDir`.
- * The function `isPathIgnoredByActiveFilter` uses this filter to determine if a given file path should
- * be ignored based on
- * @returns The function `isPathIgnoredByActiveFilter` returns a boolean value - `true` if the filePath
- * is ignored by either the system default filter or the provided contextual ignoreFilter, and `false`
- * if it is not ignored by either.
+ * The function `shouldIgnorePath` determines whether a file path should be ignored based on specified
+ * ignore filters and modes.
+ * @param filePath - The `filePath` parameter represents the path of the file that you want to check
+ * for whether it should be ignored or not based on the ignore rules provided.
+ * @param rootDir - The `rootDir` parameter in the `shouldIgnorePath` function represents the root
+ * directory of the project or file system. It is used to calculate the relative path of the `filePath`
+ * with respect to the root directory. This relative path is then checked against ignore filters to
+ * determine if the file should
+ * @param currentDir - The `currentDir` parameter in the `shouldIgnorePath` function represents the
+ * current directory path from which the `filePath` is being checked for ignoring. It is used to
+ * calculate the relative path of the `filePath` with respect to the current directory. This relative
+ * path is then used to determine if
+ * @param ignoreFilter - The `ignoreFilter` parameter is a filter object that contains patterns to
+ * determine whether a file path should be ignored or not. It is used to check if a given file path
+ * matches any of the ignore patterns specified in the filter. The function `shouldIgnorePath` uses
+ * this filter to decide whether a
+ * @param [ignoreMode=automatic] - The `ignoreMode` parameter in the `shouldIgnorePath` function
+ * determines the mode in which the path should be ignored. It has three possible values:
+ * @returns The function `shouldIgnorePath` returns a boolean value indicating whether the given file
+ * path should be ignored based on the ignore filters and mode specified. If the file path is empty or
+ * if the relative paths are empty, the function will return `true` to indicate that the path should be
+ * ignored. Otherwise, it will check against default ignore patterns, root-relative patterns, and
+ * current directory context (in automatic
  */
-function isPathIgnoredByActiveFilter(filePath, rootDir, ignoreFilter) {
+function shouldIgnorePath(filePath, rootDir, ignoreFilter) {
   const relativeToRoot = safeRelativePath(rootDir, filePath);
 
   // Basic validation for the path itself and its relative form
   if (!filePath || filePath.trim() === '' || !relativeToRoot || relativeToRoot.trim() === '') {
-    // console.warn('Ignoring empty or invalid path in isPathIgnoredByActiveFilter:', filePath); // Can be noisy
+    // console.warn('Ignoring empty or invalid path in shouldIgnorePath:', filePath); // Can be noisy
     return true; // Treat as ignorable
   }
 
   // Check against default system/common ignores first
-  if (systemDefaultFilter.ignores(relativeToRoot)) {
+  if (defaultIgnoreFilter.ignores(relativeToRoot)) {
     return true;
   }
 
@@ -147,8 +152,8 @@ function isPathIgnoredByActiveFilter(filePath, rootDir, ignoreFilter) {
  * Clears all ignore-related caches
  */
 function clearIgnoreCaches() {
-  compiledIgnoreFilterCache.clear();
-  rawGitignorePatternsCache.clear();
+  ignoreCache.clear();
+  gitIgnoreFound.clear();
   console.log('Cleared all ignore caches');
 }
 
@@ -226,26 +231,22 @@ async function collectGitignoreMapRecursive(startDir, rootDir, currentMap = new 
 }
 
 /**
- * The function `createAutomaticIgnoreFilter` generates an ignore filter based on parent filters and
- * patterns from a `.gitignore` file in automatic mode.
- * @param rootDir - The `rootDir` parameter represents the root directory of your project. It is the
- * starting point from which all other directories are referenced.
- * @param currentDir - The `currentDir` parameter in the `createAutomaticIgnoreFilter` function
- * represents the current directory for which the ignore filter is being created. It is used to
- * determine the path to the `.gitignore` file and to adjust patterns relative to this directory.
- * @param parentIgnoreFilter - The `parentIgnoreFilter` parameter is used to provide an existing ignore
- * filter instance that contains patterns to be added to the new ignore filter being created. If the
- * `parentIgnoreFilter` is a valid ignore instance, its rules will be added to the new filter. If it is
- * not a valid ignore
- * @param [ignoreMode=automatic] - The `ignoreMode` parameter in the `createAutomaticIgnoreFilter`
- * function determines how patterns are added to the ignore filter. If `ignoreMode` is set to
- * `'automatic'`, patterns will be added from the `.gitignore` file in the current directory. If it is
- * set to any
- * @returns The function `createAutomaticIgnoreFilter` returns an instance of an ignore filter (`ig`)
- * that includes patterns from the parent ignore filter (if provided and valid) and patterns from a
- * `.gitignore` file if in automatic mode.
+ * The function `createContextualIgnoreFilter` generates an 'Automatic' filter based on parent filter rules
+ * and patterns from a `.gitignore` file in automatic mode.
+ * @param rootDir - The `rootDir` parameter represents the root directory of the project where the
+ * ignore filter is being created. This is the base directory from which paths will be resolved.
+ * @param currentDir - `currentDir` is the current directory path where the
+ * `createContextualIgnoreFilter` function is being called.
+ * @param parentIgnoreFilter - The `parentIgnoreFilter` parameter is used to provide a filter object
+ * containing rules to ignore specific patterns. These patterns are typically inherited from a
+ * higher-level directory or a global configuration. The function extracts the valid patterns from the
+ * parent filter and adds them to the ignore filter being created.
+ * @param [ignoreMode=automatic] - The `ignoreMode` parameter in the `createContextualIgnoreFilter`
+ * function determines how the ignore patterns are applied.
+ * @returns The function `createContextualIgnoreFilter` returns an instance of the `ignore` class with
+ * patterns added based on the provided parameters and conditions.
  */
-function createAutomaticIgnoreFilter(
+function createContextualIgnoreFilter(
   rootDir,
   currentDir,
   parentIgnoreFilter,
@@ -259,9 +260,7 @@ function createAutomaticIgnoreFilter(
     ig.add(parentIgnoreFilter);
   } else if (parentIgnoreFilter) {
     // Optional: Log a warning if parentIgnoreFilter was expected but invalid
-    console.warn(
-      '[createAutomaticIgnoreFilter] parentIgnoreFilter was provided but is not a valid ignore instance.'
-    );
+    console.warn('[createContextualIgnoreFilter] parentIgnoreFilter was provided but is not a valid ignore instance.');
   }
 
   // 2. Only add patterns from .gitignore if in automatic mode
@@ -275,8 +274,8 @@ function createAutomaticIgnoreFilter(
     let needToProcessFile = true;
 
     // Check if we've already processed this .gitignore file
-    if (rawGitignorePatternsCache.has(cacheKey)) {
-      patterns = rawGitignorePatternsCache.get(cacheKey);
+    if (gitIgnoreFound.has(cacheKey)) {
+      patterns = gitIgnoreFound.get(cacheKey);
       needToProcessFile = false;
     }
 
@@ -290,7 +289,7 @@ function createAutomaticIgnoreFilter(
 
         // Cache the patterns for future use
         if (patterns.length > 0) {
-          rawGitignorePatternsCache.set(cacheKey, patterns);
+          gitIgnoreFound.set(cacheKey, patterns);
 
           // Get a more concise path for display
           const relativePath = safeRelativePath(rootDir, currentDir);
@@ -327,21 +326,25 @@ function createAutomaticIgnoreFilter(
 }
 
 /**
- * The function `loadAutomaticModeIgnoreFilter` loads an ignore filter for automatic mode based on
- * default patterns and patterns collected from `.gitignore` files in a specified directory.
- * @param rootDir - The `rootDir` parameter is the root directory path where the automatic mode ignore
- * filter will be loaded from.
- * @returns The function `loadAutomaticModeIgnoreFilter` returns an ignore filter (`ig`) object after
- * adding default patterns and patterns collected from `.gitignore` files in the specified `rootDir`.
- * It also caches the compiled filter for future use.
+ * The function `loadGitignore` asynchronously loads and combines default and repository-specific
+ * patterns for ignoring files in a specified directory for 'Automatic Mode'.
+ * @param rootDir - The `rootDir` parameter in the `loadGitignore` function represents the root
+ * directory path where the Gitignore file and other files to be ignored are located. It is the
+ * starting point for collecting Gitignore patterns and setting up the ignore filter.
+ * @param window - The `window` parameter in the `loadGitignore` function is not used within the
+ * function itself. It seems to be a leftover parameter that is not being utilized in the code snippet
+ * provided. If you don't need it for any specific purpose, you can safely remove it from the function
+ * signature to
+ * @returns The function `loadGitignore` returns the `ig` object, which is an instance of the `ignore`
+ * class.
  */
-async function loadAutomaticModeIgnoreFilter(rootDir) {
+async function loadGitignore(rootDir) {
   rootDir = ensureAbsolutePath(rootDir);
   const cacheKey = `${rootDir}:automatic`;
 
-  if (compiledIgnoreFilterCache.has(cacheKey)) {
+  if (ignoreCache.has(cacheKey)) {
     console.log(`Using cached ignore filter for automatic mode in:`, rootDir);
-    const cached = compiledIgnoreFilterCache.get(cacheKey);
+    const cached = ignoreCache.get(cacheKey);
     console.log('Cache entry details:', {
       patternCount: Object.keys(cached.patterns.gitignoreMap || {}).length,
     });
@@ -400,7 +403,7 @@ async function loadAutomaticModeIgnoreFilter(rootDir) {
       );
     }
 
-    compiledIgnoreFilterCache.set(cacheKey, {
+    ignoreCache.set(cacheKey, {
       ig,
       patterns: {
         gitignoreMap: Object.fromEntries(gitignoreMap),
@@ -410,7 +413,7 @@ async function loadAutomaticModeIgnoreFilter(rootDir) {
 
     return ig;
   } catch (err) {
-    console.error(`Error in loadAutomaticModeIgnoreFilter for ${rootDir}:`, err);
+    console.error(`Error in loadGitignore for ${rootDir}:`, err);
     return ig;
   }
 }
@@ -420,24 +423,22 @@ async function loadAutomaticModeIgnoreFilter(rootDir) {
 // ======================
 
 /**
- * The function `createGlobalIgnoreFilter` creates a global ignore filter by combining default
- * patterns, global mode exclusions, and custom ignores.
- * @param [customIgnores] - The `customIgnores` parameter is an optional array that allows users to
- * specify additional patterns to ignore in the global filter. These custom patterns will be
- * normalized, sorted, and added to the global filter along with the default patterns and other
- * predefined exclusions. The function then logs the number of
+ * The function `createGlobalIgnoreFilter` creates a 'Global' ignore filter by combining default
+ * patterns, excluded files, and custom ignores.
+ * @param [customIgnores] - The `customIgnores` parameter is an array that contains custom file
+ * patterns to be ignored. These patterns are normalized by trimming any extra whitespace and sorting
+ * them alphabetically before being added to the global ignore filter. The function then combines these
+ * custom ignores with default patterns and excluded files to create a
  * @returns The function `createGlobalIgnoreFilter` is returning an instance of the `ignore` class with
- * global ignore patterns added based on default patterns, GlobalModeExclusion entries, and any custom
- * ignores provided as input.
+ * global patterns added based on default patterns, excluded files, and custom ignores provided as
+ * input.
  */
 function createGlobalIgnoreFilter(customIgnores = []) {
   const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
   const ig = ignore();
-  const globalPatterns = [
-    ...DEFAULT_PATTERNS,
-    ...GlobalModeExclusion,
-    ...normalizedCustomIgnores,
-  ].map((pattern) => normalizePath(pattern));
+  const globalPatterns = [...DEFAULT_PATTERNS, ...GlobalModeExclusion, ...normalizedCustomIgnores].map(
+    (pattern) => normalizePath(pattern)
+  );
   ig.add(globalPatterns);
   console.log(
     `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${GlobalModeExclusion.length} GlobalModeExclusion entries, and ${normalizedCustomIgnores.length} custom ignores.`
@@ -453,12 +454,14 @@ function createGlobalIgnoreFilter(customIgnores = []) {
 
 // Exports
 module.exports = {
-  systemDefaultFilter, // Pre-compiled default ignore filter (uses imported DEFAULT_PATTERNS)
-  loadAutomaticModeIgnoreFilter, // for Automatic Mode
+  // DEFAULT_PATTERNS and GlobalModeExclusion are now sourced from excluded-files.js
+  // defaultIgnoreFilter is still useful to export if other modules need a quick check against defaults.
+  defaultIgnoreFilter, // Pre-compiled default ignore filter (uses imported DEFAULT_PATTERNS)
+  loadGitignore, // for Automatic Mode
   createGlobalIgnoreFilter, // for Global Mode
-  createAutomaticIgnoreFilter, // utils
-  isPathIgnoredByActiveFilter, // Utils
-  isPathExcludedByDefaults, // Utils
-  compiledIgnoreFilterCache, // Cache for ignore filters
+  createContextualIgnoreFilter, // utils
+  shouldIgnorePath, // Utils
+  shouldExcludeByDefault, // Utils
+  ignoreCache, // Cache for ignore filters
   clearIgnoreCaches, // clear ignore caches
 };
