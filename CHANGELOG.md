@@ -1,15 +1,3 @@
-## [1.0.3] - 2025-05-09
-
-### Fixed
-
-- **File Watching Improvements:**
-  - Resolved issues with watched folder synchronization:
-    - File removal now properly triggers updates
-    - New file additions are correctly detected
-    - File content changes are now reflected immediately after refreshing
-  - Added refresh button to refresh when files are added, removed, or modified
-  - Resolved circular dependency issues in the `electron/main.js` file, improving stability and performance.
-
 ## [1.0.2] - 2025-05-07
 
 ### Refactor

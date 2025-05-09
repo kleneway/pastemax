@@ -15,7 +15,11 @@ import UserInstructions from './components/UserInstructions';
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { normalizePath, arePathsEqual, isSubPath } from './utils/pathUtils';
+import {
+  normalizePath,
+  arePathsEqual,
+  isSubPath,
+} from './utils/pathUtils';
 
 /**
  * Import utility functions for content formatting and language detection.
