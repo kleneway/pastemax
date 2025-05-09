@@ -4,8 +4,12 @@ const fs = require('fs');
 const { BrowserWindow } = require('electron');
 const { debounce } = require('lodash');
 
-const { normalizePath, safeRelativePath, ensureAbsolutePath } = require('./utils.js');
-const { processSingleFile } = require('./main.js');
+const {
+  processSingleFile,
+  normalizePath,
+  safeRelativePath,
+  ensureAbsolutePath
+} = require('./utils.js');
 
 let currentWatcher = null;
 let changeDebounceMap = new Map();
