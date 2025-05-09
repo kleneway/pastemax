@@ -3,7 +3,7 @@
 // ======================
 
 // Imports
-const { DEFAULT_PATTERNS, GlobalModeExclusion } = require('./excluded-files'); // Import static pattern arrays
+const { GlobalModeExclusion } = require('./excluded-files');
 const {
   normalizePath,
   ensureAbsolutePath,
@@ -20,8 +20,46 @@ const ignore = require('ignore');
 // Global caches
 const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized root directory
 const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
+// let defaultExcludeFilter = null; // This will be handled differently now
 
-// Pre-compiled default ignore filter for early checks using the imported DEFAULT_PATTERNS
+// Default ignore patterns that should always be applied
+const DEFAULT_PATTERNS = [
+  '.git',
+  '.svn',
+  '.hg',
+  'node_modules',
+  'bower_components',
+  'vendor',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  'target',
+  'bin',
+  'Debug',
+  'Release',
+  'x64',
+  'x86',
+  '.output',
+  '*.min.js',
+  '*.min.css',
+  '*.bundle.js',
+  '*.compiled.*',
+  '*.generated.*',
+  '.cache',
+  '.parcel-cache',
+  '.webpack',
+  '.turbo',
+  '.idea',
+  '.vscode',
+  '.vs',
+  '.DS_Store',
+  'Thumbs.db',
+  'desktop.ini',
+  '*.asar',
+  'release-builds',
+];
+// Pre-compiled default ignore filter for early checks
 const defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS);
 
 /**
@@ -157,10 +195,6 @@ function clearIgnoreCaches() {
   console.log('Cleared all ignore caches');
 }
 
-// ======================
-// AUTOMATIC MODE
-// ======================
-
 /**
  * The function `collectGitignoreMapRecursive` recursively scans directories to collect and map
  * `.gitignore` patterns.
@@ -231,6 +265,38 @@ async function collectGitignoreMapRecursive(startDir, rootDir, currentMap = new 
 }
 
 /**
+ * The function `createGlobalIgnoreFilter` creates a 'Global' ignore filter by combining default
+ * patterns, excluded files, and custom ignores.
+ * @param [customIgnores] - The `customIgnores` parameter is an array that contains custom file
+ * patterns to be ignored. These patterns are normalized by trimming any extra whitespace and sorting
+ * them alphabetically before being added to the global ignore filter. The function then combines these
+ * custom ignores with default patterns and excluded files to create a
+ * @returns The function `createGlobalIgnoreFilter` is returning an instance of the `ignore` class with
+ * global patterns added based on default patterns, excluded files, and custom ignores provided as
+ * input.
+ */
+function createGlobalIgnoreFilter(customIgnores = []) {
+  const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
+  const ig = ignore();
+  const globalPatterns = [
+    ...DEFAULT_PATTERNS,
+    ...GlobalModeExclusion,
+    ...normalizedCustomIgnores,
+  ].map((pattern) => normalizePath(pattern));
+  ig.add(globalPatterns);
+  console.log(
+    `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${GlobalModeExclusion.length} GlobalModeExclusion entries, and ${normalizedCustomIgnores.length} custom ignores.`
+  );
+
+  console.log(
+    `[Global Mode] Total patterns in global filter: ${globalPatterns.length} (includes ${DEFAULT_PATTERNS.length} defaults, ${GlobalModeExclusion.length} GlobalModeExclusion, ${normalizedCustomIgnores.length} custom).`
+  );
+  // console.log(`[Global Mode] Custom ignores added:`, normalizedCustomIgnores); // This can be noisy if many custom ignores
+
+  return ig;
+}
+
+/**
  * The function `createContextualIgnoreFilter` generates an 'Automatic' filter based on parent filter rules
  * and patterns from a `.gitignore` file in automatic mode.
  * @param rootDir - The `rootDir` parameter represents the root directory of the project where the
@@ -254,13 +320,14 @@ function createContextualIgnoreFilter(
 ) {
   const ig = ignore();
 
-  // 1. Add all patterns from parent filter
-  if (parentIgnoreFilter && typeof parentIgnoreFilter.ignores === 'function') {
-    // If parentIgnoreFilter is a valid ignore instance, add its rules
-    ig.add(parentIgnoreFilter);
-  } else if (parentIgnoreFilter) {
-    // Optional: Log a warning if parentIgnoreFilter was expected but invalid
-    console.warn('[createContextualIgnoreFilter] parentIgnoreFilter was provided but is not a valid ignore instance.');
+  // 1. Add all patterns from parent filter (global/default patterns)
+  if (parentIgnoreFilter && parentIgnoreFilter.rules) {
+    const parentRules = parentIgnoreFilter.rules;
+    // Extract pattern strings from parent rules
+    const parentPatterns = Object.values(parentRules).map((rule) => rule.pattern);
+    // Filter out any undefined/empty patterns
+    const validPatterns = parentPatterns.filter((p) => p && typeof p === 'string');
+    ig.add(validPatterns);
   }
 
   // 2. Only add patterns from .gitignore if in automatic mode
@@ -418,47 +485,9 @@ async function loadGitignore(rootDir) {
   }
 }
 
-// ======================
-// GLOBAL MODE
-// ======================
-
-/**
- * The function `createGlobalIgnoreFilter` creates a 'Global' ignore filter by combining default
- * patterns, excluded files, and custom ignores.
- * @param [customIgnores] - The `customIgnores` parameter is an array that contains custom file
- * patterns to be ignored. These patterns are normalized by trimming any extra whitespace and sorting
- * them alphabetically before being added to the global ignore filter. The function then combines these
- * custom ignores with default patterns and excluded files to create a
- * @returns The function `createGlobalIgnoreFilter` is returning an instance of the `ignore` class with
- * global patterns added based on default patterns, excluded files, and custom ignores provided as
- * input.
- */
-function createGlobalIgnoreFilter(customIgnores = []) {
-  const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
-  const ig = ignore();
-  const globalPatterns = [
-    ...DEFAULT_PATTERNS,
-    ...GlobalModeExclusion,
-    ...normalizedCustomIgnores,
-  ].map((pattern) => normalizePath(pattern));
-  ig.add(globalPatterns);
-  console.log(
-    `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${GlobalModeExclusion.length} GlobalModeExclusion entries, and ${normalizedCustomIgnores.length} custom ignores.`
-  );
-
-  console.log(
-    `[Global Mode] Total patterns in global filter: ${globalPatterns.length} (includes ${DEFAULT_PATTERNS.length} defaults, ${GlobalModeExclusion.length} GlobalModeExclusion, ${normalizedCustomIgnores.length} custom).`
-  );
-  // console.log(`[Global Mode] Custom ignores added:`, normalizedCustomIgnores); // This can be noisy if many custom ignores
-
-  return ig;
-}
-
 // Exports
 module.exports = {
-  // DEFAULT_PATTERNS and GlobalModeExclusion are now sourced from excluded-files.js
-  // defaultIgnoreFilter is still useful to export if other modules need a quick check against defaults.
-  defaultIgnoreFilter, // Pre-compiled default ignore filter (uses imported DEFAULT_PATTERNS)
+  defaultIgnoreFilter, // Pre-compiled default ignore filter
   loadGitignore, // for Automatic Mode
   createGlobalIgnoreFilter, // for Global Mode
   createContextualIgnoreFilter, // utils
