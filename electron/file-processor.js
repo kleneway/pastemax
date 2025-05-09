@@ -232,8 +232,7 @@ async function processDirectory({
     // This filter includes DEFAULT_PATTERNS, GlobalModeExclusion, and custom global ignores,
     // all combined by createGlobalIgnoreFilter in main.js.
     filterToUse = ignoreFilter;
-  } else {
-    // 'automatic' mode
+  } else { // 'automatic' mode
     // AUTOMATIC MODE: Create a contextual filter for the current directory.
     // This combines the parent directory's filter (which includes DEFAULT_PATTERNS and any relevant .gitignore from higher up)
     // with .gitignore rules from the currentDir.

@@ -34,6 +34,7 @@ const { normalizePath, ensureAbsolutePath } = require('./utils.js');
 // IGNORE MANAGEMENT
 // ======================
 const {
+  defaultIgnoreFilter, // Pre-compiled default ignore filter
   loadGitignore, // for Automatic Mode
   createGlobalIgnoreFilter, // for Global Mode
   shouldExcludeByDefault, // Utils

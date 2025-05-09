@@ -1,10 +1,10 @@
-// List of common files to exclude by Global Mode
+// List of common files to exclude by default
 // Users can still manually select these files if needed
 // Paths can include glob patterns (*, **, etc.)
 
 module.exports = {
   // Files to always exclude by default when a folder is first loaded
-  // if in Global ignore mode. These appends DEFAULT_PATTERNS.
+  // if in Global ignore mode. These supplement DEFAULT_PATTERNS.
   GlobalModeExclusion: [
     // NPM/Yarn/Node related
     'package-lock.json',

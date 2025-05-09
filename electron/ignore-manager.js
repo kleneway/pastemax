@@ -159,7 +159,7 @@ function shouldExcludeByDefault(filePath, rootDir, ignoreMode) {
  * ignored. Otherwise, it will check against default ignore patterns, root-relative patterns, and
  * current directory context (in automatic
  */
-function shouldIgnorePath(filePath, rootDir, ignoreFilter) {
+function shouldIgnorePath(filePath, rootDir, currentDir, ignoreFilter, ignoreMode = 'automatic') {
   const relativeToRoot = safeRelativePath(rootDir, filePath);
 
   // Basic validation for the path itself and its relative form
@@ -278,11 +278,9 @@ async function collectGitignoreMapRecursive(startDir, rootDir, currentMap = new 
 function createGlobalIgnoreFilter(customIgnores = []) {
   const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
   const ig = ignore();
-  const globalPatterns = [
-    ...DEFAULT_PATTERNS,
-    ...GlobalModeExclusion,
-    ...normalizedCustomIgnores,
-  ].map((pattern) => normalizePath(pattern));
+  const globalPatterns = [...DEFAULT_PATTERNS, ...GlobalModeExclusion, ...normalizedCustomIgnores].map(
+    (pattern) => normalizePath(pattern)
+  );
   ig.add(globalPatterns);
   console.log(
     `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${GlobalModeExclusion.length} GlobalModeExclusion entries, and ${normalizedCustomIgnores.length} custom ignores.`
@@ -441,11 +439,8 @@ async function loadGitignore(rootDir) {
       // Add patterns to root filter
       const patternsToAdd = patterns.map((pattern) => {
         // Ensure patterns are correctly relative to the rootDir
-        if (pattern.startsWith('/')) {
-          // Anchored to .gitignore's location's root
-          return normalizePath(
-            path.join(relativeDirPath === '.' ? '' : relativeDirPath, pattern.substring(1))
-          );
+        if (pattern.startsWith('/')) { // Anchored to .gitignore's location's root
+          return normalizePath(path.join(relativeDirPath === '.' ? '' : relativeDirPath, pattern.substring(1)));
         }
         // For patterns like 'file.txt' or 'dir/', they apply to the .gitignore's directory and subdirs
         // For patterns like '**/foo' or 'foo/**' they are more global within the scope of that .gitignore

@@ -23,13 +23,7 @@ async function shutdownWatcher() {
   }
 }
 
-async function initializeWatcher(
-  folderPath,
-  window,
-  ignoreFilter,
-  defaultIgnoreFilterInstance,
-  processSingleFileCallback
-) {
+async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnoreFilterInstance, processSingleFileCallback) {
   // Shutdown existing watcher (Checklist Item 36)
   await shutdownWatcher();
 
