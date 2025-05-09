@@ -207,31 +207,28 @@ const App = (): JSX.Element => {
     localStorage.setItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS, String(includeBinaryPaths));
   }, [includeBinaryPaths]);
 
-  // Effect to handle binary file selection when includeBinaryPaths changes
+  // Effect to add/remove binary files from selection when includeBinaryPaths changes
   useEffect(() => {
-    if (!allFiles.length) return;
+    if (includeBinaryPaths) {
+      const binaryFilePaths = allFiles
+        .filter((f: FileData) => f.isBinary)
+        .map((f: FileData) => f.path);
 
-    setSelectedFiles((prev: string[]) => {
-      const currentFiles = new Set(
-        allFiles
-          .filter((f: FileData) => includeBinaryPaths || !f.isBinary)
-          .map((f: FileData) => normalizePath(f.path))
+      setSelectedFiles((prev: string[]) => {
+        const pathsToAdd = binaryFilePaths.filter(
+          (binPath: string) => !prev.some((selPath: string) => arePathsEqual(selPath, binPath))
+        );
+        return [...prev, ...pathsToAdd];
+      });
+    } else {
+      setSelectedFiles((prev: string[]) =>
+        prev.filter((selectedPath: string) => {
+          const file = allFiles.find((f: FileData) => arePathsEqual(f.path, selectedPath));
+          return !file?.isBinary;
+        })
       );
-
-      // Only update if we have changes to make
-      const needsUpdate = prev.some(path => {
-        const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
-        return (file?.isBinary && !includeBinaryPaths) || !currentFiles.has(normalizePath(path));
-      });
-
-      if (!needsUpdate) return prev;
-
-      return prev.filter(path => {
-        const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
-        return file && (includeBinaryPaths || !file.isBinary);
-      });
-    });
-  }, [includeBinaryPaths]); // Removed allFiles dependency to prevent unnecessary updates
+    }
+  }, [includeBinaryPaths, allFiles]);
 
   // Add this new useEffect for safe mode detection
   useEffect(() => {
@@ -409,38 +406,37 @@ const App = (): JSX.Element => {
         message: `Loaded ${files.length} files`,
       });
 
-      setSelectedFiles((prevSelected: string[]) => {
-        // If we have previous selections, preserve valid ones
-        if (prevSelected.length > 0) {
-          const validSelectedFiles = prevSelected.filter((selectedPath: string) =>
-            files.some(
-              (file) =>
-                arePathsEqual(file.path, selectedPath) && (includeBinaryPaths || !file.isBinary)
-            )
+      if (selectedFiles.length > 0) {
+        console.log('[handleFileListData] Preserving existing selections');
+        const validSelectedFiles = selectedFiles.filter((selectedPath: string) =>
+          files.some(
+            (file) =>
+              arePathsEqual(file.path, selectedPath) && (includeBinaryPaths || !file.isBinary)
+          )
+        );
+
+        if (validSelectedFiles.length !== selectedFiles.length) {
+          console.log(
+            '[handleFileListData] Removed invalid selections:',
+            selectedFiles.length - validSelectedFiles.length
           );
-
-          if (validSelectedFiles.length !== prevSelected.length) {
-            console.log(
-              '[handleFileListData] Removed invalid selections:',
-              prevSelected.length - validSelectedFiles.length
-            );
-          } else {
-            console.log('[handleFileListData] All existing selections are valid');
-          }
-          return validSelectedFiles;
+          setSelectedFiles(validSelectedFiles);
+        } else {
+          console.log('[handleFileListData] All existing selections are valid');
         }
-
-        // No previous selections - select all eligible files
+      } else {
         console.log('[handleFileListData] No existing selections, selecting all eligible files');
-        return files
+        const selectablePaths = files
           .filter(
             (file: FileData) =>
               !file.isSkipped && !file.excludedByDefault && (includeBinaryPaths || !file.isBinary)
           )
           .map((file: FileData) => file.path);
-      });
+
+        setSelectedFiles(selectablePaths);
+      }
     },
-    [includeBinaryPaths]
+    [selectedFiles, setAllFiles, setProcessingStatus, setSelectedFiles]
   );
 
   const stableHandleProcessingStatus = useCallback(handleProcessingStatus, [
