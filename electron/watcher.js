@@ -2,7 +2,7 @@ const chokidar = require('chokidar');
 const { debounce } = require('lodash');
 
 const { normalizePath, safeRelativePath } = require('./utils.js');
-// const { processSingleFile } = require('./file-processor'); // Removed for circular dependency fix
+const { processSingleFile } = require('./file-processor');
 
 let currentWatcher = null;
 let changeDebounceMap = new Map();
@@ -23,7 +23,7 @@ async function shutdownWatcher() {
   }
 }
 
-async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnoreFilterInstance, processSingleFileCallback) {
+async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnoreFilterInstance) {
   // Shutdown existing watcher (Checklist Item 36)
   await shutdownWatcher();
 
@@ -87,7 +87,7 @@ async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnore
   currentWatcher.on('add', async (filePath) => {
     console.log(`[WatcherModule] File Added: ${filePath}`);
     try {
-      const fileData = await processSingleFileCallback(filePath, folderPath, ignoreFilter);
+      const fileData = await processSingleFile(filePath, folderPath, ignoreFilter);
       if (fileData && window && !window.isDestroyed()) {
         window.webContents.send('file-added', fileData);
         console.log(`[WatcherModule] Sent IPC file-added for: ${fileData.relativePath}`);
@@ -101,7 +101,7 @@ async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnore
   const debouncedChangeHandler = async (filePath) => {
     console.log(`[WatcherModule] File Changed (debounced): ${filePath}`);
     try {
-      const fileData = await processSingleFileCallback(filePath, folderPath, ignoreFilter);
+      const fileData = await processSingleFile(filePath, folderPath, ignoreFilter);
       if (fileData && window && !window.isDestroyed()) {
         window.webContents.send('file-updated', fileData);
         console.log(`[WatcherModule] Sent IPC file-updated for: ${fileData.relativePath}`);
