@@ -111,14 +111,14 @@
 
 **Objective:** Confirm communication paths are correct and documentation is updated. (These steps remain largely the same as the original plan).
 
-*   [x] **Verify `preload.js`: Whitelist Channels:** Confirm `file-added`, `file-updated`, `file-removed` are allowed.
-*   [x] **Verify `App.tsx`: IPC Listener Setup:** Confirm listeners exist for the watcher events.
-*   [x] **Verify `App.tsx`: `handleFileAdded` Logic:** Confirm state update logic is correct.
-*   [x] **Verify `App.tsx`: `handleFileUpdated` Logic:** Confirm state update logic is correct.
-*   [x] **Verify `App.tsx`: `handleFileRemoved` Logic:** Confirm state update logic is correct.
-*   [x] **Review `App.tsx`: Reload on Ignore Change:** Acknowledge backend handles watcher stop reliably now.
-*   [x] **Update `README.md`: Features Section:** Update watcher description for reliability.
-*   [x] **Update `README.md`: Troubleshooting Section:** Remove/update obsolete watcher issue points.
+*   [ ] **Verify `preload.js`: Whitelist Channels:** Confirm `file-added`, `file-updated`, `file-removed` are allowed.
+*   [ ] **Verify `App.tsx`: IPC Listener Setup:** Confirm listeners exist for the watcher events.
+*   [ ] **Verify `App.tsx`: `handleFileAdded` Logic:** Confirm state update logic is correct.
+*   [ ] **Verify `App.tsx`: `handleFileUpdated` Logic:** Confirm state update logic is correct.
+*   [ ] **Verify `App.tsx`: `handleFileRemoved` Logic:** Confirm state update logic is correct.
+*   [ ] **Review `App.tsx`: Reload on Ignore Change:** Acknowledge backend handles watcher stop reliably now.
+*   [ ] **Update `README.md`: Features Section:** Update watcher description for reliability.
+*   [ ] **Update `README.md`: Troubleshooting Section:** Remove/update obsolete watcher issue points.
 
 ---
 
