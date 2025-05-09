@@ -77,32 +77,32 @@
 
 **Objective:** Modify `main.js` to use the new `watcher.js` module for all watcher operations.
 
-*   [x] **Remove `main.js` Watcher State/Functions:**
+*   [ ] **Remove `main.js` Watcher State/Functions:**
     *   Delete the global `let currentWatcher = null;` variable.
     *   Delete the `startWatcher` function implementation.
     *   Delete the `stopWatcher` function implementation.
-*   [x] **Import Watcher Module in `main.js`:**
+*   [ ] **Import Watcher Module in `main.js`:**
     *   Add `const watcher = require('./watcher.js');` near the top of `main.js`.
-*   [x] **Refactor `request-file-list` Handler:**
+*   [ ] **Refactor `request-file-list` Handler:**
     *   Replace the call to `await stopWatcher();` at the beginning with `await watcher.shutdownWatcher();`.
     *   Locate the point *after* successful file scan and *before* sending `file-list-data`.
     *   Retrieve/determine `ignoreFilter` and `defaultIgnoreFilter` (ensure `defaultIgnoreFilter` is initialized and accessible here).
     *   Get the `window` object.
     *   Replace the call to `startWatcher(...)` with `await watcher.initializeWatcher(folderPath.folderPath, window, ignoreFilter, defaultIgnoreFilter);`. (Add `await`).
-*   [x] **Refactor `set-ignore-mode` Handler:**
+*   [ ] **Refactor `set-ignore-mode` Handler:**
     *   Replace the call to `await stopWatcher();` at the beginning with `await watcher.shutdownWatcher();`.
-*   [x] **Refactor `cancelDirectoryLoading` Function:**
+*   [ ] **Refactor `cancelDirectoryLoading` Function:**
     *   Replace the call to `await stopWatcher();` with `await watcher.shutdownWatcher();`.
-*   [x] **Refactor Window Close Handler:**
+*   [ ] **Refactor Window Close Handler:**
     *   In `mainWindow.on('closed', async () => { ... })` (ensure it's async), replace `await stopWatcher();` with `await watcher.shutdownWatcher();`.
-*   [x] **Refactor App Quit Handlers:**
+*   [ ] **Refactor App Quit Handlers:**
     *   In `app.on('before-quit', async (event) => { ... })` (ensure it's async), replace potential `stopWatcher` calls with `await watcher.shutdownWatcher();`.
     *   In `app.on('window-all-closed', async () => { ... })` for non-darwin (ensure it's async), replace `await stopWatcher();` with `await watcher.shutdownWatcher();` before `app.quit()`.
-*   [x] **Remove Watcher Code from `loadGitignore`:**
+*   [ ] **Remove Watcher Code from `loadGitignore`:**
     *   Double-check that *all* `chokidar.watch` related code was removed from `loadGitignore` as per the original plan. Its sole purpose is loading ignore patterns.
-*   [x] **Make Helper Functions Accessible:**
+*   [ ] **Make Helper Functions Accessible:**
     *   Ensure functions like `processSingleFile`, `normalizePath`, `safeRelativePath`, `ensureAbsolutePath`, etc., are either correctly imported in `watcher.js` (preferred, implies they might need extraction to utils) or are still accessible if `watcher.js` requires `main.js` (less ideal due to potential circular dependencies). *Decision: Assume they will be refactored or are correctly imported.*
-*   [x] **Verify `defaultIgnoreFilter` Handling:**
+*   [ ] **Verify `defaultIgnoreFilter` Handling:**
     *   Ensure `defaultIgnoreFilter` is initialized in `main.js` before it might be needed by `watcher.initializeWatcher` and is passed correctly as an argument.
 
 ---
