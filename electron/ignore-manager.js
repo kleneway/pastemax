@@ -3,8 +3,8 @@
 // ======================
 
 // Imports
-const { excludedFiles } = require('./excluded-files');
-const { normalizePath, ensureAbsolutePath, safeRelativePath, isValidPath, safePathJoin } = require('./utils');
+import { excludedFiles } from "./excluded-files";
+import { normalizePath, ensureAbsolutePath, safeRelativePath, isValidPath, safePathJoin } from "./utils";
 
 // Constants
 const fs = require('fs');
@@ -503,10 +503,8 @@ async function loadGitignore(rootDir) {
 
 // Exports
 module.exports = {
-  defaultIgnoreFilter, // Pre-compiled default ignore filter
   loadGitignore, // for Automatic Mode
   createGlobalIgnoreFilter, // for Global Mode
-  createContextualIgnoreFilter, // utils
   shouldIgnorePath, // Utils
   shouldExcludeByDefault, // Utils
   clearCaches, // clear ignore caches

@@ -7,7 +7,6 @@ const path = require('path');
 const os = require('os');
 const { default: PQueue } = require('p-queue'); // Added for controlled concurrency
 const watcher = require('./watcher.js'); // New watcher module
-const { excludedFiles, binaryExtensions } = require('./excluded-files'); // Import the excluded files list
 
 // Configuration constants
 const MAX_DIRECTORY_LOAD_TIME = 300000; // 5 minutes timeout for large repositories
@@ -115,6 +114,9 @@ try {
   console.error('Failed to load tiktoken module:', err);
   tiktoken = null;
 }
+
+// Import the excluded files list
+const { excludedFiles, binaryExtensions } = require('./excluded-files');
 
 let encoder;
 try {
@@ -1317,3 +1319,10 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// Exports for file processing functions
+module.exports = {
+  processSingleFile,
+  isBinaryFile,
+  countTokens
+};

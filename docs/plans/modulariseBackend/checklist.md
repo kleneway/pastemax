@@ -26,11 +26,11 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
 
 ### Story 2: Extract file-processing into `electron/file-processor.js`
 
-* [x] Create new file `electron/file-processor.js`
-* [x] Copy constants `MAX_FILE_SIZE` and `CONCURRENT_DIRS` from `main.js` into `file-processor.js`
-* [x] Move caches `fileCache` and `fileTypeCache` into `file-processor.js`
-* [x] Copy functions `isBinaryFile`, `countTokens`, `processSingleFile`, `processDirectory`, and `readFilesRecursively` into `file-processor.js`
-* [x] Import dependencies at top:
+* [ ] Create new file `electron/file-processor.js`
+* [ ] Copy constants `MAX_FILE_SIZE` and `CONCURRENT_DIRS` from `main.js` into `file-processor.js`
+* [ ] Move caches `fileCache` and `fileTypeCache` into `file-processor.js`
+* [ ] Copy functions `isBinaryFile`, `countTokens`, `processSingleFile`, `processDirectory`, and `readFilesRecursively` into `file-processor.js`
+* [ ] Import dependencies at top:
 
   ```js
   const fs = require('fs');
@@ -41,7 +41,7 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
   const { normalizePath, ensureAbsolutePath, safeRelativePath, safePathJoin, isValidPath } = require('./utils');
   const { shouldExcludeByDefault, shouldIgnorePath } = require('./ignore-manager');
   ```
-* [x] Export at bottom of `file-processor.js`:
+* [ ] Export at bottom of `file-processor.js`:
 
   ```js
   module.exports = {
@@ -52,9 +52,9 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
     clearCaches
   };
   ```
-* [x] Implement and export `clearCaches()` that calls `fileCache.clear()` and `fileTypeCache.clear()`
-* [x] Add JSDoc comments for each exported function and constant
-* [x] Run `eslint --fix electron/file-processor.js` and resolve any lint errors
+* [ ] Implement and export `clearCaches()` that calls `fileCache.clear()` and `fileTypeCache.clear()`
+* [ ] Add JSDoc comments for each exported function and constant
+* [ ] Run `eslint --fix electron/file-processor.js` and resolve any lint errors
 
 ---
 
