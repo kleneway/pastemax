@@ -1,5 +1,5 @@
 /* ============================== IMPORTS ============================== */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
 import CopyButton from './components/CopyButton';
@@ -121,7 +121,6 @@ const App = (): JSX.Element => {
   /* ============================== STATE: User Instructions ============================== */
   const [userInstructions, setUserInstructions] = useState('');
   const [reloadTrigger, setReloadTrigger] = useState(0); // For triggering data re-fetch
-  const lastSentIgnoreSettingsModifiedRef = useRef(null as boolean | null);
 
   // Utility function to clear all saved state and reset the app
   const clearSavedState = useCallback(() => {
@@ -153,6 +152,8 @@ const App = (): JSX.Element => {
       window.electron.ipcRenderer.send('clear-main-cache');
     }
 
+    console.log('All saved state cleared');
+
     // Reload the application window
     console.timeEnd('clearSavedState');
     window.location.reload();
@@ -167,7 +168,6 @@ const App = (): JSX.Element => {
       try {
         setExpandedNodes(JSON.parse(savedExpandedNodes));
       } catch (error) {
-        // Keep error logging for troubleshooting
         console.error('Error parsing saved expanded nodes:', error);
       }
     }
@@ -242,6 +242,7 @@ const App = (): JSX.Element => {
 
       // If we're in safe mode, don't auto-load the previously selected folder
       if (mode.safeMode) {
+        console.log('Starting in safe mode - not loading saved folder');
         localStorage.removeItem('hasLoadedInitialData');
         localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
       }
@@ -254,34 +255,22 @@ const App = (): JSX.Element => {
     };
   }, [isElectron]);
 
-  /**
-   * Effect hook for loading file list data when dependencies change.
-   * Handles debouncing requests and prevents duplicate requests when ignoreSettingsModified is reset.
-   * @dependencies selectedFolder, isElectron, isSafeMode, ignoreMode, customIgnores, ignoreSettingsModified, reloadTrigger
-   */
+  // Simplified useEffect for loading initial data
   useEffect(() => {
     if (!isElectron || !selectedFolder || isSafeMode) {
-      lastSentIgnoreSettingsModifiedRef.current = null; // Reset ref when not processing
       return;
     }
 
-    // Debug log kept intentionally (see Story 4.2) - helps track effect triggers
-    // and state changes during development
     console.log(
       `[useEffect triggered] Folder: ${selectedFolder}, ReloadTrigger: ${reloadTrigger}, IgnoreModified: ${ignoreSettingsModified}`
     );
 
     // Set status to processing *before* the timeout to give immediate feedback
-    // Check if this is a refresh vs initial load
+    // Determine if this is a refresh of the currently loaded folder or an initial load/different folder load
     const isRefreshingCurrentFolder =
       reloadTrigger > 0 &&
+      typeof window !== 'undefined' &&
       selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
-
-    if (ignoreSettingsModified === false && lastSentIgnoreSettingsModifiedRef.current === true) {
-      console.log('[useEffect] Skipping request: run is due to ignoreSettingsModified reset.');
-      lastSentIgnoreSettingsModifiedRef.current = false; // Update ref to reflect current state
-      return; // Skip the rest of this effect run
-    }
 
     setProcessingStatus({
       status: 'processing',
@@ -295,7 +284,6 @@ const App = (): JSX.Element => {
         customIgnores,
         ignoreSettingsModified,
       });
-      lastSentIgnoreSettingsModifiedRef.current = ignoreSettingsModified;
       window.electron.ipcRenderer.send('request-file-list', {
         folderPath: selectedFolder,
         ignoreMode,
@@ -323,15 +311,10 @@ const App = (): JSX.Element => {
     resetIgnoreSettingsModified,
   ]);
 
-  /**
-   * Handles folder selection with validation and state management.
-   * Prevents redundant processing when the same folder is selected.
-   * @param folderPath - The path of the selected folder
-   * @dependencies selectedFolder, allFiles, processingStatus
-   */
+  // Memoize event handlers to maintain reference equality
   const handleFolderSelected = useCallback(
     (folderPath: string) => {
-      // Validate input
+      // Check if folderPath is valid string
       if (typeof folderPath !== 'string') {
         console.error('Invalid folder path received:', folderPath);
         setProcessingStatus({
@@ -341,28 +324,49 @@ const App = (): JSX.Element => {
         return;
       }
 
-      // Skip if same folder is already loaded/loading
+      // Prevent redundant processing if the same folder is selected and already loaded/loading
       if (
         arePathsEqual(folderPath, selectedFolder) &&
         (allFiles.length > 0 || processingStatus.status === 'processing')
       ) {
-        // Skip if same folder is already loaded/loading
+        console.log('Folder already selected and loaded/loading, skipping request:', folderPath);
         return;
       }
 
       const normalizedFolderPath = normalizePath(folderPath);
-      // Log kept for debugging folder selection
       console.log('Folder selected:', normalizedFolderPath);
-      
-      // Update state - main data loading is handled by separate useEffect
+      setProcessingStatus({
+        status: 'processing',
+        message: 'Requesting file list...',
+      });
       setSelectedFolder(normalizedFolderPath);
-      
-      // Clear selections if folder changed
-      if (!arePathsEqual(normalizedFolderPath, selectedFolder)) {
+      const currentFolder = selectedFolder;
+      if (!arePathsEqual(normalizedFolderPath, currentFolder)) {
         setSelectedFiles([]);
       }
+      console.log('[handleFolderSelected] Sending request-file-list:', {
+        folderPath,
+        ignoreMode,
+        customIgnores,
+        ignoreSettingsModified,
+      });
+      window.electron.ipcRenderer.send('request-file-list', {
+        folderPath,
+        ignoreMode,
+        customIgnores,
+        ignoreSettingsModified,
+      });
+      resetIgnoreSettingsModified();
     },
-    [selectedFolder, allFiles, processingStatus]
+    [
+      selectedFolder,
+      allFiles,
+      processingStatus,
+      ignoreMode,
+      customIgnores,
+      ignoreSettingsModified,
+      resetIgnoreSettingsModified,
+    ]
   );
 
   // The handleFileListData function is implemented as stableHandleFileListData below
@@ -370,6 +374,7 @@ const App = (): JSX.Element => {
 
   const handleProcessingStatus = useCallback(
     (status: { status: 'idle' | 'processing' | 'complete' | 'error'; message: string }) => {
+      console.log('Processing status:', status);
       setProcessingStatus(status);
     },
     []
@@ -416,12 +421,18 @@ const App = (): JSX.Element => {
           );
 
           if (validSelectedFiles.length !== prevSelected.length) {
-            // Some selections were removed as they became invalid
+            console.log(
+              '[handleFileListData] Removed invalid selections:',
+              prevSelected.length - validSelectedFiles.length
+            );
+          } else {
+            console.log('[handleFileListData] All existing selections are valid');
           }
           return validSelectedFiles;
         }
 
         // No previous selections - select all eligible files
+        console.log('[handleFileListData] No existing selections, selecting all eligible files');
         return files
           .filter(
             (file: FileData) =>
@@ -460,14 +471,14 @@ const App = (): JSX.Element => {
       console.info('[App] Backend signaled ignore mode update:', newMode);
     };
 
-    // Set up IPC listeners for electron communication
+    console.log('[useEffect] Setting up IPC listeners');
     window.electron.ipcRenderer.on('folder-selected', handleFolderSelected);
     window.electron.ipcRenderer.on('file-list-data', handleFileListData);
     window.electron.ipcRenderer.on('file-processing-status', handleProcessingStatus);
     window.electron.ipcRenderer.on('ignore-mode-updated', handleBackendModeUpdate);
 
     return () => {
-      // Clean up IPC listeners when component unmounts
+      console.log('[useEffect] Cleaning up IPC listeners');
       window.electron.ipcRenderer.removeListener('folder-selected', handleFolderSelected);
       window.electron.ipcRenderer.removeListener('file-list-data', handleFileListData);
       window.electron.ipcRenderer.removeListener('file-processing-status', handleProcessingStatus);
