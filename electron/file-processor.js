@@ -117,7 +117,7 @@ function isBinaryFile(filePath) {
  * based on certain criteria. It likely contains a function `ignores()` that checks if a given file
  * path should be ignored according to predefined rules or filters. If the function returns true for a
  * specific file path, that file
- * @param {string} ignoreMode - The current ignore mode ('automatic' or 'global'). This influences checks like `shouldExcludeByDefault`.
+ * @param {string} ignoreMode - The current ignore mode ('automatic' or 'global').
  * @returns The `processSingleFile` function returns a Promise that resolves to an object representing
  * data about a single file. The object contains properties such as name, path, relativePath, size,
  * isBinary, isSkipped, content, tokenCount, excludedByDefault, and error (if any). The function
@@ -147,8 +147,6 @@ async function processSingleFile(fullPath, rootDir, ignoreFilter, ignoreMode) {
       isSkipped: false,
       content: '',
       tokenCount: 0,
-      // Determine if the file should be marked as 'excluded by default'.
-      // This check is mode-dependent (e.g., GlobalModeExclusion applies only in 'global' mode via shouldExcludeByDefault).
       excludedByDefault: shouldExcludeByDefault(fullPath, rootDir, ignoreMode),
     };
 
@@ -225,19 +223,11 @@ async function processDirectory({
     return { results: [], progress };
   }
 
-  // Determine the appropriate ignore filter based on the ignoreMode
-  let filterToUse;
-  if (ignoreMode === 'global') {
-    // GLOBAL MODE: Use the pre-configured global ignore filter directly.
-    // This filter includes DEFAULT_PATTERNS, GlobalModeExclusion, and custom global ignores,
-    // all combined by createGlobalIgnoreFilter in main.js.
-    filterToUse = ignoreFilter;
-  } else { // 'automatic' mode
-    // AUTOMATIC MODE: Create a contextual filter for the current directory.
-    // This combines the parent directory's filter (which includes DEFAULT_PATTERNS and any relevant .gitignore from higher up)
-    // with .gitignore rules from the currentDir.
-    filterToUse = createContextualIgnoreFilter(rootDir, currentDir, ignoreFilter, ignoreMode);
-  }
+  // In global mode, use the passed ignoreFilter directly
+  const filterToUse =
+    ignoreMode === 'global'
+      ? ignoreFilter
+      : createContextualIgnoreFilter(rootDir, currentDir, ignoreFilter, ignoreMode);
 
   if (!shouldIgnorePath(fullPath, rootDir, currentDir, filterToUse, ignoreMode)) {
     progress.directories++;
@@ -313,11 +303,6 @@ async function readFilesRecursively(
   ignoreMode = 'automatic',
   fileQueue = null
 ) {
-  // This function orchestrates recursive directory reading.
-  // It receives the 'ignoreMode' and the appropriate 'ignoreFilter'
-  // (which is pre-determined by the caller for the initial call, or by a recursive call from processDirectory for sub-directories)
-  // and passes them down for consistent ignore rule application.
-
   await watcher.shutdownWatcher();
   if (!ignoreFilter) {
     throw new Error('readFilesRecursively requires an ignoreFilter parameter');

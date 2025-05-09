@@ -3,7 +3,7 @@
 // ======================
 
 // Imports
-const { GlobalModeExclusion } = require('./excluded-files');
+const { excludedFiles } = require('./excluded-files');
 const {
   normalizePath,
   ensureAbsolutePath,
@@ -119,13 +119,13 @@ function shouldExcludeByDefault(filePath, rootDir, ignoreMode) {
     return true;
   }
 
-  // If in 'global' mode, also check against GlobalModeExclusion
+  // If in 'global' mode, also check against excludedFiles
   if (ignoreMode === 'global') {
-    // It's important that GlobalModeExclusion are not empty, otherwise ignore() might behave unexpectedly.
-    if (GlobalModeExclusion && GlobalModeExclusion.length > 0) {
-      const globalExcludedFilesFilter = ignore().add(GlobalModeExclusion);
+    // It's important that excludedFiles are not empty, otherwise ignore() might behave unexpectedly.
+    if (excludedFiles && excludedFiles.length > 0) {
+      const globalExcludedFilesFilter = ignore().add(excludedFiles);
       if (globalExcludedFilesFilter.ignores(relativePath)) {
-        // console.log(`[shouldExcludeByDefault] Excluded by GlobalModeExclusion (Global Mode): ${relativePath}`);
+        // console.log(`[shouldExcludeByDefault] Excluded by excludedFiles (Global Mode): ${relativePath}`);
         return true;
       }
     }
@@ -278,18 +278,18 @@ async function collectGitignoreMapRecursive(startDir, rootDir, currentMap = new 
 function createGlobalIgnoreFilter(customIgnores = []) {
   const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
   const ig = ignore();
-  const globalPatterns = [...DEFAULT_PATTERNS, ...GlobalModeExclusion, ...normalizedCustomIgnores].map(
+  const globalPatterns = [...DEFAULT_PATTERNS, ...excludedFiles, ...normalizedCustomIgnores].map(
     (pattern) => normalizePath(pattern)
   );
   ig.add(globalPatterns);
   console.log(
-    `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${GlobalModeExclusion.length} GlobalModeExclusion entries, and ${normalizedCustomIgnores.length} custom ignores.`
+    `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${excludedFiles.length} excluded files, and ${normalizedCustomIgnores.length} custom ignores`
   );
 
   console.log(
-    `[Global Mode] Total patterns in global filter: ${globalPatterns.length} (includes ${DEFAULT_PATTERNS.length} defaults, ${GlobalModeExclusion.length} GlobalModeExclusion, ${normalizedCustomIgnores.length} custom).`
+    `[Global Mode] Added ${globalPatterns.length} global patterns (${excludedFiles.length} excluded + ${normalizedCustomIgnores.length} custom)`
   );
-  // console.log(`[Global Mode] Custom ignores added:`, normalizedCustomIgnores); // This can be noisy if many custom ignores
+  console.log(`[Global Mode] Custom ignores added:`, normalizedCustomIgnores);
 
   return ig;
 }
