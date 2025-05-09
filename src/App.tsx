@@ -114,13 +114,7 @@ const App = (): JSX.Element => {
 
   /* ============================== STATE: User Instructions ============================== */
   const [userInstructions, setUserInstructions] = useState('');
-  /**
-   * State variable used to trigger data re-fetching when its value changes.
-   * The `reloadTrigger` is incremented whenever a refresh of the file list or
-   * other related data is required. Components or hooks that depend on this
-   * state can listen for changes and re-execute their logic accordingly.
-   */
-  const [reloadTrigger, setReloadTrigger] = useState(0);
+  const [reloadTrigger, setReloadTrigger] = useState(0); // For triggering data re-fetch
   const lastSentIgnoreSettingsModifiedRef = useRef(null as boolean | null);
 
   // Utility function to clear all saved state and reset the app
