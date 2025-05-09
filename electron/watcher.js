@@ -9,7 +9,7 @@ const {
   normalizePath,
   safeRelativePath,
   ensureAbsolutePath
-} = require('./utils.js');
+} = require('./main.js');
 
 let currentWatcher = null;
 let changeDebounceMap = new Map();
