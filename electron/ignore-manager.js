@@ -436,9 +436,11 @@ async function loadGitignore(rootDir) {
 function createGlobalIgnoreFilter(customIgnores = []) {
   const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
   const ig = ignore();
-  const globalPatterns = [...DEFAULT_PATTERNS, ...GlobalModeExclusion, ...normalizedCustomIgnores].map(
-    (pattern) => normalizePath(pattern)
-  );
+  const globalPatterns = [
+    ...DEFAULT_PATTERNS,
+    ...GlobalModeExclusion,
+    ...normalizedCustomIgnores,
+  ].map((pattern) => normalizePath(pattern));
   ig.add(globalPatterns);
   console.log(
     `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${GlobalModeExclusion.length} GlobalModeExclusion entries, and ${normalizedCustomIgnores.length} custom ignores.`

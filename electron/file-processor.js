@@ -240,7 +240,7 @@ async function processDirectory({
     filterToUse = createContextualIgnoreFilter(rootDir, currentDir, ignoreFilter, ignoreMode);
   }
 
-  if (!shouldIgnorePath(fullPath, rootDir, filterToUse)) {
+  if (!shouldIgnorePath(fullPath, rootDir, currentDir, filterToUse, ignoreMode)) {
     progress.directories++;
     // Pass ignoreMode to processSingleFile when setting up watcher
     const processSingleFileCallback = (filePathCb, rootDirCb, ignoreFilterCb) =>
@@ -416,7 +416,7 @@ async function readFilesRecursively(
             return;
           }
 
-          if (shouldIgnorePath(fullPath, rootDir, ignoreFilter)) {
+          if (shouldIgnorePath(fullPath, rootDir, currentDir, ignoreFilter, ignoreMode)) {
             // console.log('Ignored by filter, skipping:', relativePath); // Can be noisy
             return;
           }
