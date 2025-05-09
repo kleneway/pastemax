@@ -88,7 +88,7 @@ const {
   ensureAbsolutePath,
   safePathJoin,
   safeRelativePath,
-  isValidPath,
+  isValidPath
 } = require('./utils.js');
 
 // ======================
@@ -463,6 +463,7 @@ async function loadGitignore(rootDir, window) {
       },
     });
 
+
     return ig;
   } catch (err) {
     console.error(`Error in loadGitignore for ${rootDir}:`, err);
@@ -574,6 +575,7 @@ async function processDirectory({
   ignoreMode = 'automatic',
   fileQueue = null,
 }) {
+
   await watcher.shutdownWatcher();
   const fullPath = safePathJoin(dir, dirent.name);
   const relativePath = safeRelativePath(rootDir, fullPath);
@@ -631,6 +633,7 @@ async function readFilesRecursively(
   ignoreMode = 'automatic',
   fileQueue = null
 ) {
+
   await watcher.shutdownWatcher();
   if (!ignoreFilter) {
     throw new Error('readFilesRecursively requires an ignoreFilter parameter');

@@ -54,5 +54,5 @@ module.exports = {
   ensureAbsolutePath,
   safeRelativePath,
   safePathJoin,
-  isValidPath,
+  isValidPath
 };

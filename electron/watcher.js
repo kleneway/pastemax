@@ -64,8 +64,8 @@ async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnore
     persistent: true,
     awaitWriteFinish: {
       stabilityThreshold: 2000,
-      pollInterval: 100,
-    },
+      pollInterval: 100
+    }
   };
 
   // Instantiate watcher (Checklist Item 54)
@@ -127,7 +127,7 @@ async function initializeWatcher(folderPath, window, ignoreFilter, defaultIgnore
       if (window && !window.isDestroyed() && relativePath) {
         window.webContents.send('file-removed', {
           path: normalizedPath,
-          relativePath: relativePath,
+          relativePath: relativePath
         });
         console.log(`[WatcherModule] Sent IPC file-removed for: ${relativePath}`);
       }

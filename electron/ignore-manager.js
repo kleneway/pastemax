@@ -4,13 +4,7 @@
 
 // Imports
 const { excludedFiles } = require('./excluded-files');
-const {
-  normalizePath,
-  ensureAbsolutePath,
-  safeRelativePath,
-  isValidPath,
-  safePathJoin,
-} = require('./utils');
+const { normalizePath, ensureAbsolutePath, safeRelativePath, isValidPath, safePathJoin } = require('./utils');
 
 // Constants
 const fs = require('fs');
@@ -20,44 +14,44 @@ const ignore = require('ignore');
 // Global caches
 const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized root directory
 const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
-let defaultExcludeFilter = null; // Cache for default exclude ignore filter
+let defaultExcludeFilter = null // Cache for default exclude ignore filter
 
 // Default ignore patterns that should always be applied
 const DEFAULT_PATTERNS = [
-  '.git',
-  '.svn',
-  '.hg',
-  'node_modules',
-  'bower_components',
-  'vendor',
-  'dist',
-  'build',
-  'out',
-  '.next',
-  'target',
-  'bin',
-  'Debug',
-  'Release',
-  'x64',
-  'x86',
-  '.output',
-  '*.min.js',
-  '*.min.css',
-  '*.bundle.js',
-  '*.compiled.*',
-  '*.generated.*',
-  '.cache',
-  '.parcel-cache',
-  '.webpack',
-  '.turbo',
-  '.idea',
-  '.vscode',
-  '.vs',
-  '.DS_Store',
-  'Thumbs.db',
-  'desktop.ini',
-  '*.asar',
-  'release-builds',
+'.git',
+'.svn',
+'.hg',
+'node_modules',
+'bower_components',
+'vendor',
+'dist',
+'build',
+'out',
+'.next',
+'target',
+'bin',
+'Debug',
+'Release',
+'x64',
+'x86',
+'.output',
+'*.min.js',
+'*.min.css',
+'*.bundle.js',
+'*.compiled.*',
+'*.generated.*',
+'.cache',
+'.parcel-cache',
+'.webpack',
+'.turbo',
+'.idea',
+'.vscode',
+'.vs',
+'.DS_Store',
+'Thumbs.db',
+'desktop.ini',
+'*.asar',
+'release-builds',
 ];
 // Pre-compiled default ignore filter for early checks
 const defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS);
@@ -76,67 +70,67 @@ const defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS);
  * conditions are met, it returns `false`.
  */
 function shouldExcludeByDefault(filePath, rootDir) {
-  filePath = ensureAbsolutePath(filePath);
-  rootDir = ensureAbsolutePath(rootDir);
+    filePath = ensureAbsolutePath(filePath);
+    rootDir = ensureAbsolutePath(rootDir);
 
-  const relativePath = safeRelativePath(rootDir, filePath);
+    const relativePath = safeRelativePath(rootDir, filePath);
 
-  if (!isValidPath(relativePath) || relativePath.startsWith('..')) {
-    return true;
-  }
-
-  if (process.platform === 'win32') {
-    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(path.basename(filePath))) {
-      console.log(`Excluding reserved Windows name: ${path.basename(filePath)}`);
-      return true;
+    if (!isValidPath(relativePath) || relativePath.startsWith('..')) {
+        return true;
     }
 
-    if (
-      filePath.toLowerCase().includes('\\windows\\') ||
-      filePath.toLowerCase().includes('\\system32\\')
-    ) {
-      console.log(`Excluding system path: ${filePath}`);
-      return true;
+    if (process.platform === 'win32') {
+        if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(path.basename(filePath))) {
+        console.log(`Excluding reserved Windows name: ${path.basename(filePath)}`);
+        return true;
+        }
+
+        if (
+        filePath.toLowerCase().includes('\\windows\\') ||
+        filePath.toLowerCase().includes('\\system32\\')
+        ) {
+        console.log(`Excluding system path: ${filePath}`);
+        return true;
+        }
     }
-  }
 
-  if (process.platform === 'darwin') {
-    if (
-      filePath.includes('/.Spotlight-') ||
-      filePath.includes('/.Trashes') ||
-      filePath.includes('/.fseventsd')
-    ) {
-      console.log(`Excluding macOS system path: ${filePath}`);
-      return true;
+    if (process.platform === 'darwin') {
+        if (
+        filePath.includes('/.Spotlight-') ||
+        filePath.includes('/.Trashes') ||
+        filePath.includes('/.fseventsd')
+        ) {
+        console.log(`Excluding macOS system path: ${filePath}`);
+        return true;
+        }
     }
-  }
 
-  if (process.platform === 'linux') {
-    if (
-      filePath.startsWith('/proc/') ||
-      filePath.startsWith('/sys/') ||
-      filePath.startsWith('/dev/')
-    ) {
-      console.log(`Excluding Linux system path: ${filePath}`);
-      return true;
+    if (process.platform === 'linux') {
+        if (
+        filePath.startsWith('/proc/') ||
+        filePath.startsWith('/sys/') ||
+        filePath.startsWith('/dev/')
+        ) {
+        console.log(`Excluding Linux system path: ${filePath}`);
+        return true;
+        }
     }
-  }
 
-  // Create the filter only once and reuse it
-  if (!defaultExcludeFilter) {
-    defaultExcludeFilter = ignore().add(excludedFiles);
-    console.log(`[Default Exclude] Initialized filter with ${excludedFiles.length} excluded files`);
-  }
+    // Create the filter only once and reuse it
+    if (!defaultExcludeFilter) {
+        defaultExcludeFilter = ignore().add(excludedFiles);
+        console.log(`[Default Exclude] Initialized filter with ${excludedFiles.length} excluded files`);
+    }
 
-  const isExcluded = defaultExcludeFilter.ignores(relativePath);
+    const isExcluded = defaultExcludeFilter.ignores(relativePath);
 
-  // Only log exclusions periodically to reduce spam
-  if (isExcluded && Math.random() < 0.05) {
-    // Log ~5% of exclusions as samples
-    console.log(`[Default Exclude] Excluded file: ${relativePath}`);
-  }
+    // Only log exclusions periodically to reduce spam
+    if (isExcluded && Math.random() < 0.05) {
+        // Log ~5% of exclusions as samples
+        console.log(`[Default Exclude] Excluded file: ${relativePath}`);
+    }
 
-  return isExcluded;
+    return isExcluded;
 }
 
 /**
@@ -241,53 +235,53 @@ function clearIgnoreCaches() {
  * its subdirectories.
  */
 async function collectGitignoreMapRecursive(startDir, rootDir, currentMap = new Map()) {
-  const normalizedStartDir = normalizePath(startDir);
-  const normalizedRootDir = normalizePath(rootDir);
-
-  try {
-    await fs.promises.access(normalizedStartDir, fs.constants.R_OK);
-  } catch (err) {
-    console.warn(`Cannot access directory: ${normalizedStartDir}`, err);
+    const normalizedStartDir = normalizePath(startDir);
+    const normalizedRootDir = normalizePath(rootDir);
+  
+    try {
+      await fs.promises.access(normalizedStartDir, fs.constants.R_OK);
+    } catch (err) {
+      console.warn(`Cannot access directory: ${normalizedStartDir}`, err);
+      return currentMap;
+    }
+  
+    // Read .gitignore in current directory
+    const gitignorePath = safePathJoin(normalizedStartDir, '.gitignore');
+    try {
+      const content = await fs.promises.readFile(gitignorePath, 'utf8');
+      const patterns = content
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#'));
+  
+      if (patterns.length > 0) {
+        const relativeDirPath = safeRelativePath(normalizedRootDir, normalizedStartDir) || '.';
+        currentMap.set(relativeDirPath, patterns);
+        console.log(`Found .gitignore in ${relativeDirPath} with ${patterns.length} patterns`);
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error(`Error reading ${gitignorePath}:`, err);
+      }
+    }
+  
+    // Recursively scan subdirectories in parallel
+    try {
+      const dirents = await fs.promises.readdir(normalizedStartDir, { withFileTypes: true });
+      const subdirs = dirents.filter((dirent) => dirent.isDirectory());
+  
+      // Process subdirectories in parallel
+      await Promise.all(
+        subdirs.map(async (dirent) => {
+          const subDir = safePathJoin(normalizedStartDir, dirent.name);
+          await collectGitignoreMapRecursive(subDir, normalizedRootDir, currentMap);
+        })
+      );
+    } catch (err) {
+      console.error(`Error reading directory ${normalizedStartDir} for recursion:`, err);
+    }
+  
     return currentMap;
-  }
-
-  // Read .gitignore in current directory
-  const gitignorePath = safePathJoin(normalizedStartDir, '.gitignore');
-  try {
-    const content = await fs.promises.readFile(gitignorePath, 'utf8');
-    const patterns = content
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'));
-
-    if (patterns.length > 0) {
-      const relativeDirPath = safeRelativePath(normalizedRootDir, normalizedStartDir) || '.';
-      currentMap.set(relativeDirPath, patterns);
-      console.log(`Found .gitignore in ${relativeDirPath} with ${patterns.length} patterns`);
-    }
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error(`Error reading ${gitignorePath}:`, err);
-    }
-  }
-
-  // Recursively scan subdirectories in parallel
-  try {
-    const dirents = await fs.promises.readdir(normalizedStartDir, { withFileTypes: true });
-    const subdirs = dirents.filter((dirent) => dirent.isDirectory());
-
-    // Process subdirectories in parallel
-    await Promise.all(
-      subdirs.map(async (dirent) => {
-        const subDir = safePathJoin(normalizedStartDir, dirent.name);
-        await collectGitignoreMapRecursive(subDir, normalizedRootDir, currentMap);
-      })
-    );
-  } catch (err) {
-    console.error(`Error reading directory ${normalizedStartDir} for recursion:`, err);
-  }
-
-  return currentMap;
 }
 
 /**
@@ -498,6 +492,7 @@ async function loadGitignore(rootDir) {
         patternOrigins: Object.fromEntries(patternOrigins),
       },
     });
+
 
     return ig;
   } catch (err) {

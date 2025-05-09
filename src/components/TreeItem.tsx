@@ -9,9 +9,11 @@ import { arePathsEqual } from '../utils/pathUtils';
  */
 const isFileExcluded = (fileData: any, includeBinaryPaths: boolean): boolean => {
   if (!fileData) return false;
-
+  
   return (
-    fileData.isSkipped || fileData.excludedByDefault || (fileData.isBinary && !includeBinaryPaths)
+    fileData.isSkipped || 
+    fileData.excludedByDefault || 
+    (fileData.isBinary && !includeBinaryPaths)
   );
 };
 
@@ -123,7 +125,7 @@ const TreeItem = ({
   const isDirectorySelected = useMemo(
     () =>
       type === 'directory' && node.children && node.children.length > 0
-        ? (function () {
+        ? (function() {
             // Check if folder is disabled due to containing only unselectable files and includeBinaryPaths is OFF
             const isFolderDisabledDueToUnselectableFiles =
               node.type === 'directory' &&

@@ -3,14 +3,11 @@
 ## Issue 1: safeRelativePath Error and Circular Dependencies
 
 ### Problem:
-
 - Utility functions (processSingleFile, normalizePath, safeRelativePath, ensureAbsolutePath) are imported from main.js in watcher.js
 - This creates circular dependencies and causes the safeRelativePath is not a function error
 
 ### Solution:
-
 1. Create new utility file `electron/utils.js` with:
-
 ```js
 const path = require('path');
 
@@ -34,18 +31,17 @@ module.exports = {
   processSingleFile,
   normalizePath,
   safeRelativePath,
-  ensureAbsolutePath,
+  ensureAbsolutePath
 };
 ```
 
 2. Update watcher.js imports:
-
 ```js
 const {
   processSingleFile,
   normalizePath,
   safeRelativePath,
-  ensureAbsolutePath,
+  ensureAbsolutePath
 } = require('./utils');
 ```
 
@@ -54,29 +50,28 @@ const {
 ## Issue 2: App Not Updating Automatically
 
 ### Problem:
-
 - File change events (add/update/remove) are detected and IPC messages are sent
 - App.tsx receives messages but only updates UI when ignore mode changes
 
 ### Solution:
-
 1. Modify App.tsx to update state on file changes:
-
 ```tsx
 // Add these handlers in the main useEffect
 useEffect(() => {
   if (!isElectron) return;
 
   const handleFileAdded = (newFile: FileData) => {
-    setAllFiles((prev) => [...prev, newFile]);
+    setAllFiles(prev => [...prev, newFile]);
   };
 
   const handleFileUpdated = (updatedFile: FileData) => {
-    setAllFiles((prev) => prev.map((f) => (f.path === updatedFile.path ? updatedFile : f)));
+    setAllFiles(prev => prev.map(f => 
+      f.path === updatedFile.path ? updatedFile : f
+    ));
   };
 
   const handleFileRemoved = (filePath: string) => {
-    setAllFiles((prev) => prev.filter((f) => f.path !== filePath));
+    setAllFiles(prev => prev.filter(f => f.path !== filePath));
   };
 
   window.electron.ipcRenderer.on('file-added', handleFileAdded);
@@ -94,12 +89,10 @@ useEffect(() => {
 ## Testing Plan
 
 1. Verify safeRelativePath error is resolved:
-
    - Start app and check terminal for errors
    - Confirm file watching works without errors
 
 2. Test auto-update functionality:
-
    - Add file to watched folder - should appear immediately
    - Modify file - changes should reflect immediately
    - Remove file - should disappear immediately
