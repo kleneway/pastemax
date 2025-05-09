@@ -98,15 +98,10 @@ async function initializeWatcher(
       // processSingleFileCallback (which is processSingleFile) will read fresh and update the cache.
       const fileData = await processSingleFileCallback(filePath, rootDir, ignoreFilter);
       if (fileData && window && !window.isDestroyed()) {
-        console.log(
-          `[WatcherModule][IPC] Sending 'file-added' for: ${fileData.relativePath}. Data:`,
-          JSON.stringify(fileData)
-        );
+        console.log(`[WatcherModule][IPC] Sending 'file-added' for: ${fileData.relativePath}. Data:`, JSON.stringify(fileData));
         window.webContents.send('file-added', fileData);
       } else {
-        console.log(
-          `[WatcherModule] 'file-added' event for ${filePath} - no fileData or window invalid.`
-        );
+        console.log(`[WatcherModule] 'file-added' event for ${filePath} - no fileData or window invalid.`);
       }
     } catch (error) {
       console.error(`[WatcherModule] Error processing added file ${filePath}:`, error);
@@ -122,15 +117,10 @@ async function initializeWatcher(
       // processSingleFileCallback (which is processSingleFile) will read fresh and update the cache.
       const fileData = await processSingleFileCallback(filePath, rootDir, ignoreFilter);
       if (fileData && window && !window.isDestroyed()) {
-        console.log(
-          `[WatcherModule][IPC] Sending 'file-updated' for: ${fileData.relativePath}. Data:`,
-          JSON.stringify(fileData)
-        );
+        console.log(`[WatcherModule][IPC] Sending 'file-updated' for: ${fileData.relativePath}. Data:`, JSON.stringify(fileData));
         window.webContents.send('file-updated', fileData);
       } else {
-        console.log(
-          `[WatcherModule] 'file-updated' event for ${filePath} - no fileData or window invalid.`
-        );
+        console.log(`[WatcherModule] 'file-updated' event for ${filePath} - no fileData or window invalid.`);
       }
     } catch (error) {
       console.error(`[WatcherModule] Error processing changed file ${filePath}:`, error);
@@ -153,15 +143,10 @@ async function initializeWatcher(
       const relativePath = safeRelativePath(rootDir, normalizedPath);
       const eventData = { path: normalizedPath, relativePath: relativePath };
       if (window && !window.isDestroyed() && relativePath) {
-        console.log(
-          `[WatcherModule][IPC] Sending 'file-removed' for: ${relativePath}. Data:`,
-          JSON.stringify(eventData)
-        );
+        console.log(`[WatcherModule][IPC] Sending 'file-removed' for: ${relativePath}. Data:`, JSON.stringify(eventData));
         window.webContents.send('file-removed', eventData);
       } else {
-        console.log(
-          `[WatcherModule] 'file-removed' event for ${filePath} - no relativePath or window invalid.`
-        );
+        console.log(`[WatcherModule] 'file-removed' event for ${filePath} - no relativePath or window invalid.`);
       }
     } catch (error) {
       console.error(`[WatcherModule] Error processing removed file ${filePath}:`, error);

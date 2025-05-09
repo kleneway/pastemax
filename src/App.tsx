@@ -219,14 +219,14 @@ const App = (): JSX.Element => {
       );
 
       // Only update if we have changes to make
-      const needsUpdate = prev.some((path) => {
+      const needsUpdate = prev.some(path => {
         const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
         return (file?.isBinary && !includeBinaryPaths) || !currentFiles.has(normalizePath(path));
       });
 
       if (!needsUpdate) return prev;
 
-      return prev.filter((path) => {
+      return prev.filter(path => {
         const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
         return file && (includeBinaryPaths || !file.isBinary);
       });
@@ -261,20 +261,19 @@ const App = (): JSX.Element => {
       return;
     }
 
-    console.log(
-      `[useEffect triggered] Folder: ${selectedFolder}, ReloadTrigger: ${reloadTrigger}, IgnoreModified: ${ignoreSettingsModified}`
-    );
+    console.log(`[useEffect triggered] Folder: ${selectedFolder}, ReloadTrigger: ${reloadTrigger}, IgnoreModified: ${ignoreSettingsModified}`);
 
     // Set status to processing *before* the timeout to give immediate feedback
     // Determine if this is a refresh of the currently loaded folder or an initial load/different folder load
-    const isRefreshingCurrentFolder =
-      reloadTrigger > 0 &&
-      typeof window !== 'undefined' &&
-      selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
+    const isRefreshingCurrentFolder = reloadTrigger > 0 && 
+                                    typeof window !== 'undefined' && 
+                                    selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
 
     setProcessingStatus({
       status: 'processing',
-      message: isRefreshingCurrentFolder ? 'Refreshing file list...' : 'Loading files...',
+      message: isRefreshingCurrentFolder
+                 ? 'Refreshing file list...'
+                 : 'Loading files...',
     });
 
     const timer = setTimeout(() => {
@@ -587,10 +586,7 @@ const App = (): JSX.Element => {
     const handleFileAdded = (newFile: FileData) => {
       console.log('<<< IPC Event Received: file-added >>> Data:', JSON.stringify(newFile));
       if (newFile.isBinary && !includeBinaryPaths) {
-        console.log(
-          '[Renderer][file-added] Skipping binary file as includeBinaryPaths is false:',
-          newFile.path
-        );
+        console.log('[Renderer][file-added] Skipping binary file as includeBinaryPaths is false:', newFile.path);
         return; // skip auto-selecting binary
       }
       console.log('[Renderer][IPC] Received file-added:', newFile);
@@ -625,16 +621,17 @@ const App = (): JSX.Element => {
 
     const handleFileRemoved = (filePathData: { path: string; relativePath: string } | string) => {
       // filePath from IPC for 'file-removed' can be an object { path: string, relativePath: string } or just a string
-      const pathToRemove =
-        typeof filePathData === 'object' && filePathData !== null && 'path' in filePathData
-          ? filePathData.path
-          : (filePathData as string);
+      const pathToRemove = typeof filePathData === 'object' && filePathData !== null && 'path' in filePathData
+        ? filePathData.path
+        : filePathData as string;
       console.log('<<< IPC Event Received: file-removed >>> Data:', JSON.stringify(filePathData));
       console.log('[Renderer][IPC] Received file-removed, path to remove:', pathToRemove);
       const normalizedPath = normalizePath(pathToRemove);
       setAllFiles((prevFiles: FileData[]) => {
         // applyFiltersAndSort will be triggered by the useEffect watching allFiles
-        return prevFiles.filter((file: FileData) => !arePathsEqual(file.path, normalizedPath));
+        return prevFiles.filter(
+          (file: FileData) => !arePathsEqual(file.path, normalizedPath)
+        );
       });
       setSelectedFiles((prevSelected: string[]) =>
         prevSelected.filter((path: string) => !arePathsEqual(path, normalizedPath))
@@ -648,8 +645,8 @@ const App = (): JSX.Element => {
 
     return () => {
       window.electron.ipcRenderer.removeListener('file-added', handleFileAdded);
-      window.electron.ipcRenderer.removeListener('file-updated', handleFileUpdated);
-      window.electron.ipcRenderer.removeListener('file-removed', handleFileRemoved);
+    window.electron.ipcRenderer.removeListener('file-updated', handleFileUpdated);
+    window.electron.ipcRenderer.removeListener('file-removed', handleFileRemoved);
     };
   }, [isElectron, sortOrder, searchTerm, applyFiltersAndSort, includeBinaryPaths]);
 
@@ -903,8 +900,7 @@ const App = (): JSX.Element => {
               <button
                 className="refresh-list-btn" // Add a new class for styling
                 onClick={() => {
-                  if (selectedFolder) {
-                    // Only refresh if a folder is selected
+                  if (selectedFolder) { // Only refresh if a folder is selected
                     console.log('[Refresh Button] Clicked, selectedFolder:', selectedFolder);
                     // DO NOT setProcessingStatus here. Let the useEffect handle it.
                     setReloadTrigger((prev: number) => prev + 1);
