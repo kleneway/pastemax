@@ -49,8 +49,10 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
     readFilesRecursively,
     isBinaryFile,
     countTokens,
+    clearCaches
   };
   ```
+* [x] Implement and export `clearCaches()` that calls `fileCache.clear()` and `fileTypeCache.clear()`
 * [x] Add JSDoc comments for each exported function and constant
 * [x] Run `eslint --fix electron/file-processor.js` and resolve any lint errors
 
@@ -58,30 +60,30 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
 
 ### Story 3: Refactor `electron/main.js` orchestrator
 
-* [x] Remove all ignore-logic and file-processing code blocks from `main.js`
-* [x] Add at top:
+* [ ] Remove all ignore-logic and file-processing code blocks from `main.js`
+* [ ] Add at top:
 
   ```js
   const { loadGitignore, shouldIgnorePath, shouldExcludeByDefault, clearCaches: clearIgnoreCaches } = require('./ignore-manager');
   const { processSingleFile, readFilesRecursively, isBinaryFile, countTokens, clearCaches: clearFileCaches } = require('./file-processor');
   ```
-* [x] In `'clear-main-cache'` IPC handler, replace direct cache clears with:
+* [ ] In `'clear-main-cache'` IPC handler, replace direct cache clears with:
 
   ```js
   clearIgnoreCaches();
   clearFileCaches();
   ```
-* [x] In `'set-ignore-mode'`, after `ignoreCache.clear()`, replace with `clearIgnoreCaches(); clearFileCaches();`
-* [x] In `'request-file-list'`, replace calls to old `loadGitignore` with `loadGitignore`, and `readFilesRecursively` import
-* [x] Ensure all other IPC handlers still reference `processSingleFile`, `readFilesRecursively`, etc., via the new imports
-* [x] Run `eslint --fix electron/main.js` and resolve any lint errors
-* [x] Manually verify that nothing else in `main.js` was altered
+* [ ] In `'set-ignore-mode'`, after `ignoreCache.clear()`, replace with `clearIgnoreCaches(); clearFileCaches();`
+* [ ] In `'request-file-list'`, replace calls to old `loadGitignore` with `loadGitignore`, and `readFilesRecursively` import
+* [ ] Ensure all other IPC handlers still reference `processSingleFile`, `readFilesRecursively`, etc., via the new imports
+* [ ] Run `eslint --fix electron/main.js` and resolve any lint errors
+* [ ] Manually verify that nothing else in `main.js` was altered
 
 ---
 
 ### Story 4: Update `electron/watcher.js` to use `file-processor.js`
 
-* [x] In `watcher.js`, change
+* [ ] In `watcher.js`, change
 
   ```js
   const { processSingleFile } = require('./main.js');
@@ -92,9 +94,9 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
   ```js
   const { processSingleFile } = require('./file-processor');
   ```
-* [x] Remove any unused imports from `main.js` in `watcher.js`
-* [x] Run `eslint --fix electron/watcher.js` and resolve any lint errors
-* [x] Smoke-test file add/change/remove in the live app to confirm watcher still sends IPC events
+* [ ] Remove any unused imports from `main.js` in `watcher.js`
+* [ ] Run `eslint --fix electron/watcher.js` and resolve any lint errors
+* [ ] Smoke-test file add/change/remove in the live app to confirm watcher still sends IPC events
 
 ---
 
