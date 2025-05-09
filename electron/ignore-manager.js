@@ -165,26 +165,47 @@ function shouldExcludeByDefault(filePath, rootDir) {
  * current directory context (in automatic
  */
 function shouldIgnorePath(filePath, rootDir, currentDir, ignoreFilter, ignoreMode = 'automatic') {
-  const relativeToRoot = safeRelativePath(rootDir, filePath);
-
-  // Basic validation for the path itself and its relative form
-  if (!filePath || filePath.trim() === '' || !relativeToRoot || relativeToRoot.trim() === '') {
-    // console.warn('Ignoring empty or invalid path in shouldIgnorePath:', filePath); // Can be noisy
-    return true; // Treat as ignorable
+  // Validate paths to prevent empty path errors
+  if (!filePath || filePath.trim() === '') {
+    console.warn('Ignoring empty path in shouldIgnorePath');
+    return true; // Treat empty paths as "should ignore"
   }
 
-  // Check against default system/common ignores first
-  if (defaultIgnoreFilter.ignores(relativeToRoot)) {
+  const relativeToRoot = safeRelativePath(rootDir, filePath);
+  const relativeToCurrent = safeRelativePath(currentDir, filePath);
+
+  // Validate that the relative paths are not empty
+  if (!relativeToRoot || relativeToRoot.trim() === '') {
+    console.warn(`Skipping empty relativeToRoot path for: ${filePath}`);
     return true;
   }
 
-  // Then, check against the provided contextual ignoreFilter.
-  // This filter is expected to have all patterns already normalized to be relative to rootDir.
+  // First check against default patterns (fast path)
+  if (defaultIgnoreFilter.ignores(relativeToRoot)) {
+    console.log('Skipped by default ignore patterns:', relativeToRoot);
+    return true;
+  }
+
+  // Then check against root-relative patterns (global/default)
   if (ignoreFilter.ignores(relativeToRoot)) {
     return true;
   }
 
-  return false; // If not ignored by any of the above, it's not ignored.
+  // In global mode, we don't need contextual checks
+  if (ignoreMode === 'global') {
+    return false;
+  }
+
+  // Then check against current directory context (automatic mode only)
+  const currentIgnoreFilter = createContextualIgnoreFilter(rootDir, currentDir, ignoreFilter);
+
+  // Ensure relativeToCurrent is not empty before calling ignores
+  if (!relativeToCurrent || relativeToCurrent.trim() === '') {
+    console.warn(`Skipping empty relativeToCurrent path for: ${filePath}`);
+    return false; // Don't ignore if we can't determine the relative path
+  }
+
+  return currentIgnoreFilter.ignores(relativeToCurrent);
 }
 
 // ======================

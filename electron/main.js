@@ -45,12 +45,7 @@ const {
 // ======================
 // FILE PROCESSING
 // ======================
-const {
-  readFilesRecursively,
-  clearFileCaches,
-  startFileProcessing,
-  stopFileProcessing,
-} = require('./file-processor.js');
+const { readFilesRecursively, clearFileCaches } = require('./file-processor.js');
 
 // ======================
 // DIRECTORY LOADING MANAGEMENT
@@ -62,9 +57,7 @@ function setupDirectoryLoadingTimeout(window, folderPath) {
 
   loadingTimeoutId = setTimeout(() => {
     console.log(
-      `Directory loading timed out after ${MAX_DIRECTORY_LOAD_TIME / 1000} seconds: ${
-        folderPath && typeof folderPath === 'object' ? folderPath.folderPath : folderPath
-      }`
+      `Directory loading timed out after ${MAX_DIRECTORY_LOAD_TIME / 1000} seconds: ${folderPath}`
     );
     console.log(
       `Stats at timeout: Processed ${currentProgress.directories} directories and ${currentProgress.files} files`
@@ -84,7 +77,6 @@ async function cancelDirectoryLoading(window, reason = 'user') {
     `Stats at cancellation: Processed ${currentProgress.directories} directories and ${currentProgress.files} files`
   );
 
-  stopFileProcessing(); // Stop file processor state
   isLoadingDirectory = false;
 
   if (loadingTimeoutId) {
@@ -218,11 +210,11 @@ if (!ipcMain.eventNames().includes('set-ignore-mode')) {
   });
 }
 
-ipcMain.on('request-file-list', async (event, payload) => {
-  console.log('Received request-file-list payload:', payload); // Log the entire payload
+ipcMain.on('request-file-list', async (event, folderPath) => {
+  console.log('Received request-file-list payload:', folderPath); // Log the entire payload
 
   if (isLoadingDirectory) {
-    console.log('Already processing a directory, ignoring new request for:', payload);
+    console.log('Already processing a directory, ignoring new request for:', folderPath);
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window && window.webContents && !window.webContents.isDestroyed()) {
       window.webContents.send('file-processing-status', {
@@ -235,8 +227,7 @@ ipcMain.on('request-file-list', async (event, payload) => {
 
   try {
     isLoadingDirectory = true;
-    startFileProcessing(); // Start file processor state
-    setupDirectoryLoadingTimeout(BrowserWindow.fromWebContents(event.sender), payload.folderPath);
+    setupDirectoryLoadingTimeout(BrowserWindow.fromWebContents(event.sender), folderPath);
 
     event.sender.send('file-processing-status', {
       status: 'processing',
@@ -246,23 +237,23 @@ ipcMain.on('request-file-list', async (event, payload) => {
     currentProgress = { directories: 0, files: 0 };
 
     // Clear ignore cache if ignore settings were modified
-    if (payload.ignoreSettingsModified) {
+    if (folderPath.ignoreSettingsModified) {
       console.log('Clearing ignore cache due to modified ignore settings');
       clearIgnoreCaches();
     }
 
     console.log(
-      `Loading ignore patterns for: ${payload.folderPath} in mode: ${payload.ignoreMode}`
+      `Loading ignore patterns for: ${folderPath.folderPath} in mode: ${folderPath.ignoreMode}`
     );
     let ignoreFilter;
-    if (payload.ignoreMode === 'global') {
-      console.log('Using global ignore filter with custom ignores:', payload.customIgnores);
-      ignoreFilter = createGlobalIgnoreFilter(payload.customIgnores);
+    if (folderPath.ignoreMode === 'global') {
+      console.log('Using global ignore filter with custom ignores:', folderPath.customIgnores);
+      ignoreFilter = createGlobalIgnoreFilter(folderPath.customIgnores);
     } else {
       // Default to automatic
       console.log('Using automatic ignore filter (loading .gitignore)');
       ignoreFilter = await loadGitignore(
-        payload.folderPath,
+        folderPath.folderPath,
         BrowserWindow.fromWebContents(event.sender)
       );
     }
@@ -272,13 +263,13 @@ ipcMain.on('request-file-list', async (event, payload) => {
     console.log('Ignore patterns loaded successfully');
 
     const { results: files } = await readFilesRecursively(
-      payload.folderPath,
-      payload.folderPath, // rootDir is the same as the initial dir for top-level call
+      folderPath.folderPath,
+      folderPath.folderPath,
       ignoreFilter,
       BrowserWindow.fromWebContents(event.sender),
       currentProgress,
-      payload.folderPath, // currentDir is also the same for top-level
-      payload?.ignoreMode ?? currentIgnoreMode
+      folderPath.folderPath,
+      folderPath?.ignoreMode ?? currentIgnoreMode
     );
 
     if (!isLoadingDirectory) {
@@ -289,7 +280,6 @@ ipcMain.on('request-file-list', async (event, payload) => {
       clearTimeout(loadingTimeoutId);
       loadingTimeoutId = null;
     }
-    stopFileProcessing(); // Stop file processor state
     isLoadingDirectory = false;
 
     event.sender.send('file-processing-status', {
@@ -313,7 +303,7 @@ ipcMain.on('request-file-list', async (event, payload) => {
           size: file.size,
           isDirectory: file.isDirectory,
           extension: path.extname(file.name).toLowerCase(),
-          excluded: shouldExcludeByDefault(file.path, payload.folderPath),
+          excluded: shouldExcludeByDefault(file.path, folderPath.folderPath),
           content: file.content,
           tokenCount: file.tokenCount,
           isBinary: file.isBinary,
@@ -325,7 +315,6 @@ ipcMain.on('request-file-list', async (event, payload) => {
     event.sender.send('file-list-data', serializedFiles);
   } catch (err) {
     console.error('Error processing file list:', err);
-    stopFileProcessing(); // Stop file processor state
     isLoadingDirectory = false;
 
     if (loadingTimeoutId) {
@@ -338,7 +327,6 @@ ipcMain.on('request-file-list', async (event, payload) => {
       message: `Error: ${err.message}`,
     });
   } finally {
-    stopFileProcessing(); // Ensure file processor state is reset
     isLoadingDirectory = false;
     if (loadingTimeoutId) {
       clearTimeout(loadingTimeoutId);
