@@ -16,9 +16,11 @@ import UserInstructions from './components/UserInstructions';
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
 import {
+  // generateAsciiFileTree, unused
   normalizePath,
   arePathsEqual,
   isSubPath,
+  // join, unused
 } from './utils/pathUtils';
 
 /**
@@ -209,32 +211,27 @@ const App = (): JSX.Element => {
   useEffect(() => {
     if (!allFiles.length) return;
 
-    setSelectedFiles((prevSelectedFiles: string[]) => {
-      // Preserve all existing selections
-      const newSelectedFiles = [...prevSelectedFiles];
+    setSelectedFiles((prev: string[]) => {
+      const currentFiles = new Set(
+        allFiles
+          .filter((f: FileData) => includeBinaryPaths || !f.isBinary)
+          .map((f: FileData) => normalizePath(f.path))
+      );
 
-      // Process binary files based on includeBinaryPaths
-      allFiles.forEach((file: FileData) => {
-        const normalizedPath = normalizePath(file.path);
-        if (file.isBinary) {
-          const isSelected = newSelectedFiles.some((p) => arePathsEqual(p, normalizedPath));
-
-          if (includeBinaryPaths && !isSelected) {
-            // Add binary file if not already selected
-            newSelectedFiles.push(normalizedPath);
-          } else if (!includeBinaryPaths && isSelected) {
-            // Remove binary file if selected
-            const index = newSelectedFiles.findIndex((p) => arePathsEqual(p, normalizedPath));
-            if (index !== -1) {
-              newSelectedFiles.splice(index, 1);
-            }
-          }
-        }
+      // Only update if we have changes to make
+      const needsUpdate = prev.some((path) => {
+        const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
+        return (file?.isBinary && !includeBinaryPaths) || !currentFiles.has(normalizePath(path));
       });
 
-      return newSelectedFiles;
+      if (!needsUpdate) return prev;
+
+      return prev.filter((path) => {
+        const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
+        return file && (includeBinaryPaths || !file.isBinary);
+      });
     });
-  }, [includeBinaryPaths, allFiles]);
+  }, [includeBinaryPaths]); // Removed allFiles dependency to prevent unnecessary updates
 
   // Add this new useEffect for safe mode detection
   useEffect(() => {
@@ -277,7 +274,8 @@ const App = (): JSX.Element => {
     // Set status to processing *before* the timeout to give immediate feedback
     // Check if this is a refresh vs initial load
     const isRefreshingCurrentFolder =
-      reloadTrigger > 0 && selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
+      reloadTrigger > 0 &&
+      selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
 
     if (ignoreSettingsModified === false && lastSentIgnoreSettingsModifiedRef.current === true) {
       console.log('[useEffect] Skipping request: run is due to ignoreSettingsModified reset.');
@@ -355,10 +353,10 @@ const App = (): JSX.Element => {
       const normalizedFolderPath = normalizePath(folderPath);
       // Log kept for debugging folder selection
       console.log('Folder selected:', normalizedFolderPath);
-
+      
       // Update state - main data loading is handled by separate useEffect
       setSelectedFolder(normalizedFolderPath);
-
+      
       // Clear selections if folder changed
       if (!arePathsEqual(normalizedFolderPath, selectedFolder)) {
         setSelectedFiles([]);
@@ -408,12 +406,19 @@ const App = (): JSX.Element => {
       });
 
       setSelectedFiles((prevSelected: string[]) => {
-        // If we have previous selections, preserve all existing selections
+        // If we have previous selections, preserve valid ones
         if (prevSelected.length > 0) {
-          // Only filter out files that no longer exist in the new list
-          return prevSelected.filter((selectedPath: string) =>
-            files.some((file) => arePathsEqual(file.path, selectedPath))
+          const validSelectedFiles = prevSelected.filter((selectedPath: string) =>
+            files.some(
+              (file) =>
+                arePathsEqual(file.path, selectedPath) && (includeBinaryPaths || !file.isBinary)
+            )
           );
+
+          if (validSelectedFiles.length !== prevSelected.length) {
+            // Some selections were removed as they became invalid
+          }
+          return validSelectedFiles;
         }
 
         // No previous selections - select all eligible files
@@ -564,55 +569,78 @@ const App = (): JSX.Element => {
     applyFiltersAndSort(allFiles, sortOrder, searchTerm);
   }, [applyFiltersAndSort, allFiles, sortOrder, searchTerm]); // Added all dependencies
 
-  // File event handlers with proper typing
-  const handleFileAdded = useCallback((newFile: FileData) => {
-    console.log('<<< IPC Event Received: file-added >>> Data:', JSON.stringify(newFile));
-    setAllFiles((prevFiles: FileData[]) =>
-      prevFiles.some((f) => arePathsEqual(f.path, newFile.path))
-        ? prevFiles
-        : [...prevFiles, newFile]
-    );
-  }, []);
-
-  const handleFileUpdated = useCallback((updatedFile: FileData) => {
-    console.log('<<< IPC Event Received: file-updated >>> Data:', JSON.stringify(updatedFile));
-    setAllFiles((prevFiles: FileData[]) =>
-      prevFiles.map((file) => (arePathsEqual(file.path, updatedFile.path) ? updatedFile : file))
-    );
-  }, []);
-
-  const handleFileRemoved = useCallback(
-    (filePathData: { path: string; relativePath: string } | string) => {
-      const path = typeof filePathData === 'object' ? filePathData.path : filePathData;
-      const normalizedPath = normalizePath(path);
-      setAllFiles((prevFiles: FileData[]) =>
-        prevFiles.filter((file) => !arePathsEqual(file.path, normalizedPath))
-      );
-      setSelectedFiles((prevSelected: string[]) =>
-        prevSelected.filter((p) => !arePathsEqual(p, normalizedPath))
-      );
-    },
-    []
-  );
-
-  // Stable IPC listeners
+  // Listen for live file changes from main process
   useEffect(() => {
     if (!isElectron) return;
 
-    const listeners = [
-      { event: 'file-added', handler: handleFileAdded },
-      { event: 'file-updated', handler: handleFileUpdated },
-      { event: 'file-removed', handler: handleFileRemoved },
-    ];
+    const handleFileAdded = (newFile: FileData) => {
+      console.log('<<< IPC Event Received: file-added >>> Data:', JSON.stringify(newFile));
+      if (newFile.isBinary && !includeBinaryPaths) {
+        console.log(
+          '[Renderer][file-added] Skipping binary file as includeBinaryPaths is false:',
+          newFile.path
+        );
+        return; // skip auto-selecting binary
+      }
+      console.log('[Renderer][IPC] Received file-added:', newFile);
+      setAllFiles((prevFiles: FileData[]) => {
+        // Avoid duplicates
+        if (prevFiles.some((f: FileData) => arePathsEqual(f.path, newFile.path))) {
+          console.log('[State Update] File already exists, ignoring:', newFile.path);
+          return prevFiles;
+        }
+        // applyFiltersAndSort will be triggered by the useEffect watching allFiles
+        return [...prevFiles, newFile];
+      });
+      // Optionally auto-select the new file if it meets criteria
+      if (!newFile.isSkipped && !newFile.excludedByDefault) {
+        setSelectedFiles((prev: string[]) => [...prev, normalizePath(newFile.path)]);
+      }
+      // setSelectedFiles((prev: string[]) => [...prev, normalizePath(newFile.path)]); // Removed auto-selection for now
+      // The UI will update based on allFiles change via applyFiltersAndSort
+    };
 
-    listeners.forEach(({ event, handler }) => window.electron.ipcRenderer.on(event, handler));
+    const handleFileUpdated = (updatedFile: FileData) => {
+      console.log('<<< IPC Event Received: file-updated >>> Data:', JSON.stringify(updatedFile));
+      console.log('[Renderer][IPC] Received file-updated:', updatedFile);
+      setAllFiles((prevFiles: FileData[]) => {
+        // applyFiltersAndSort will be triggered by the useEffect watching allFiles
+        return prevFiles.map((file: FileData) =>
+          arePathsEqual(file.path, updatedFile.path) ? updatedFile : file
+        );
+      });
+      // The UI will update based on allFiles change via applyFiltersAndSort
+    };
+
+    const handleFileRemoved = (filePathData: { path: string; relativePath: string } | string) => {
+      // filePath from IPC for 'file-removed' can be an object { path: string, relativePath: string } or just a string
+      const pathToRemove =
+        typeof filePathData === 'object' && filePathData !== null && 'path' in filePathData
+          ? filePathData.path
+          : (filePathData as string);
+      console.log('<<< IPC Event Received: file-removed >>> Data:', JSON.stringify(filePathData));
+      console.log('[Renderer][IPC] Received file-removed, path to remove:', pathToRemove);
+      const normalizedPath = normalizePath(pathToRemove);
+      setAllFiles((prevFiles: FileData[]) => {
+        // applyFiltersAndSort will be triggered by the useEffect watching allFiles
+        return prevFiles.filter((file: FileData) => !arePathsEqual(file.path, normalizedPath));
+      });
+      setSelectedFiles((prevSelected: string[]) =>
+        prevSelected.filter((path: string) => !arePathsEqual(path, normalizedPath))
+      );
+      // The UI will update based on allFiles change via applyFiltersAndSort
+    };
+
+    window.electron.ipcRenderer.on('file-added', handleFileAdded);
+    window.electron.ipcRenderer.on('file-updated', handleFileUpdated);
+    window.electron.ipcRenderer.on('file-removed', handleFileRemoved);
 
     return () => {
-      listeners.forEach(({ event, handler }) =>
-        window.electron.ipcRenderer.removeListener(event, handler)
-      );
+      window.electron.ipcRenderer.removeListener('file-added', handleFileAdded);
+      window.electron.ipcRenderer.removeListener('file-updated', handleFileUpdated);
+      window.electron.ipcRenderer.removeListener('file-removed', handleFileRemoved);
     };
-  }, [isElectron, handleFileAdded, handleFileUpdated, handleFileRemoved]);
+  }, [isElectron, sortOrder, searchTerm, applyFiltersAndSort, includeBinaryPaths]);
 
   // Toggle file selection
   const toggleFileSelection = (filePath: string) => {
