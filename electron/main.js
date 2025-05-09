@@ -77,18 +77,6 @@ const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized r
 const fileCache = new Map(); // Cache for file metadata keyed by normalized file path
 const fileTypeCache = new Map(); // Cache for binary file type detection results
 const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
-let defaultExcludeFilter = null; // Cache for default exclude ignore filter
-
-// ======================
-// PATH UTILITIES
-// ======================
-const {
-  normalizePath,
-  ensureAbsolutePath,
-  safePathJoin,
-  safeRelativePath,
-  isValidPath
-} = require('./utils.js');
 
 // ======================
 // MODULE INITIALIZATION
@@ -131,6 +119,20 @@ try {
   console.log('Using fallback token counter');
   encoder = null;
 }
+
+// ======================
+// PATH UTILITIES
+// ======================
+const {
+  normalizePath,
+  ensureAbsolutePath,
+  safePathJoin,
+  safeRelativePath,
+  isValidPath
+} = require('./utils.js');
+
+// Cache for default exclude ignore filter
+let defaultExcludeFilter = null;
 
 function shouldExcludeByDefault(filePath, rootDir) {
   filePath = ensureAbsolutePath(filePath);

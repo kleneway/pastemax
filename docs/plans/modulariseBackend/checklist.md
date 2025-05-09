@@ -7,20 +7,20 @@ Below is a comprehensive, story-by-story breakdown to fully modularise **main.js
 
 ### Story 1: Extract ignore-management into `electron/ignore-manager.js`
 
-* [x] Create new file `electron/ignore-manager.js`
-* [x] Copy `DEFAULT_PATTERNS` constant from `main.js` into `ignore-manager.js`
-* [x] Import `excludedFiles` from `./excluded-files.js` at top of `ignore-manager.js`
-* [x] Move caches `ignoreCache`, `gitIgnoreFound`, and `defaultExcludeFilter` declarations into `ignore-manager.js`
-* [x] Copy functions `shouldExcludeByDefault`, `collectGitignoreMapRecursive`, `createGlobalIgnoreFilter`, `createContextualIgnoreFilter`, `shouldIgnorePath`, and `loadGitignore` into `ignore-manager.js`
-* [x] Add `const ignore = require('ignore')` and `const fs = require('fs')`, `const path = require('path')` as needed
-* [x] Export at bottom of `ignore-manager.js`:
+* [ ] Create new file `electron/ignore-manager.js`
+* [ ] Copy `DEFAULT_PATTERNS` constant from `main.js` into `ignore-manager.js`
+* [ ] Import `excludedFiles` from `./excluded-files.js` at top of `ignore-manager.js`
+* [ ] Move caches `ignoreCache`, `gitIgnoreFound`, and `defaultExcludeFilter` declarations into `ignore-manager.js`
+* [ ] Copy functions `shouldExcludeByDefault`, `collectGitignoreMapRecursive`, `createGlobalIgnoreFilter`, `createContextualIgnoreFilter`, `shouldIgnorePath`, and `loadGitignore` into `ignore-manager.js`
+* [ ] Add `const ignore = require('ignore')` and `const fs = require('fs')`, `const path = require('path')` as needed
+* [ ] Export at bottom of `ignore-manager.js`:
 
   ```js
   module.exports = { loadGitignore, shouldIgnorePath, shouldExcludeByDefault, clearCaches }
   ```
-* [x] Implement and export `clearCaches()` that calls `ignoreCache.clear()` and `gitIgnoreFound.clear()`
-* [x] Add JSDoc comments for each exported function and constant
-* [x] Run `eslint --fix electron/ignore-manager.js` and resolve any lint errors
+* [ ] Implement and export `clearCaches()` that calls `ignoreCache.clear()` and `gitIgnoreFound.clear()`
+* [ ] Add JSDoc comments for each exported function and constant
+* [ ] Run `eslint --fix electron/ignore-manager.js` and resolve any lint errors
 
 ---
 
