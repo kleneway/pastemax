@@ -1,22 +1,24 @@
 # Errors in terminal log:
 ```
-(node:8100) Warning: Accessing non-existent property 'processSingleFile' of module exports inside circular dependency
+[WatcherModule] Error in ignored function: TypeError: safeRelativePath is not a function
+    at ignored (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\electron\watcher.js:45:30)
+    at matchPatterns (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\anymatch\index.js:62:18)  
+    at FSWatcher._userIgnored (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\anymatch\index.js:96:14)
+    at FSWatcher._isIgnored (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\chokidar\index.js:779:15)
+    at NodeFsHandler._addToNodeFs (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\chokidar\lib\nodefs-handler.js:589:16)
+    at E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\chokidar\index.js:451:47
+    at Array.map (<anonymous>)
+    at FSWatcher.add (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\chokidar\index.js:450:13) 
+    at Object.watch (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\node_modules\chokidar\index.js:969:11)  
+    at Object.initializeWatcher (E:\CODING\Projects\CODE\PasteMax\PasteMax-Priv\electron\watcher.js:80:31) 
 ```
 ```
-[WatcherModule] Watcher started successfully for folder: E:/CODING/Projects/CODE/mechvibesTest/src/audio/mxbrown-travel
-[WatcherModule] Attempting to stop existing watcher...
-[WatcherModule] Existing watcher stopped successfully.
-Skipped by default ignore patterns: src/audio/turquoise/release
-[WatcherModule] Attempting to start watcher for folder: E:/CODING/Projects/CODE/mechvibesTest/src/audio/turquoise
-[WatcherModule] Could not get relative path for: E:/CODING/Projects/CODE/mechvibesTest/src/audio/turquoise  
-[WatcherModule] Watcher started successfully for folder: E:/CODING/Projects/CODE/mechvibesTest/src/audio/turquoise
-[WatcherModule] Attempting to stop existing watcher...
-[WatcherModule] Existing watcher stopped successfully.
-[WatcherModule] Attempting to start watcher for folder: E:/CODING/Projects/CODE/mechvibesTest/src/libs/electron-log
-[WatcherModule] Could not get relative path for: E:/CODING/Projects/CODE/mechvibesTest/src/libs/electron-log
-[WatcherModule] Watcher started successfully for folder: E:/CODING/Projects/CODE/mechvibesTest/src/libs/electron-log
-[WatcherModule] Attempting to stop existing watcher...
-[WatcherModule] Existing watcher stopped successfully.
+--- createWindow() ENTERED ---
+(node:24272) Warning: Accessing non-existent property 'processSingleFile' of module exports inside circular dependency
+(Use `electron --trace-warnings ...` to show where the warning was created)
+(node:24272) Warning: Accessing non-existent property 'normalizePath' of module exports inside circular dependency
+(node:24272) Warning: Accessing non-existent property 'safeRelativePath' of module exports inside circular dependency
+(node:24272) Warning: Accessing non-existent property 'ensureAbsolutePath' of module exports inside circular dependency
 ```
 
 ## Test Cases Runned
@@ -35,10 +37,10 @@ Note: The file is added to the watched folder only when user manually reloads th
 
 ### Test Case 3:
 - [x] Test Case 3: Update a content of a file in watched folder then reloads the app.
-- [x] Result: File does not update automatically after reloading the app. Checked the file contents through the previewer modal `FilePrevieweModal.tsx` and the content is not updated.
+- [x] Result: File does not update automatically after reloading the app. Checked through the previewer modal `FilePrevieweModal.tsx` and the content is not updated.
 
 Note:
-- For some reason the file then properly updates if user change ignore patterns in the settings from `ignorePatternsViewer` `ToggleSwitch`. This is not expected behavior and should be fixed.
+- For some reason the file then properly updates if user change ignore patterns in the settings. This is not expected behavior and should be fixed.
 - As the file should be updated automatically, when user reloads the app.
 - Another thing as expected the update to file content is not reflected in the app until a manual refresh is performed. This needs to be addressed to ensure seamless user experience.
 
