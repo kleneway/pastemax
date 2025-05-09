@@ -117,13 +117,12 @@ function isBinaryFile(filePath) {
  * based on certain criteria. It likely contains a function `ignores()` that checks if a given file
  * path should be ignored according to predefined rules or filters. If the function returns true for a
  * specific file path, that file
- * @param {string} ignoreMode - The current ignore mode ('automatic' or 'global').
  * @returns The `processSingleFile` function returns a Promise that resolves to an object representing
  * data about a single file. The object contains properties such as name, path, relativePath, size,
  * isBinary, isSkipped, content, tokenCount, excludedByDefault, and error (if any). The function
  * handles processing of a file, checking for validity, ignoring based on filter, reading file stats,
  */
-async function processSingleFile(fullPath, rootDir, ignoreFilter, ignoreMode) {
+async function processSingleFile(fullPath, rootDir, ignoreFilter) {
   try {
     fullPath = ensureAbsolutePath(fullPath);
     rootDir = ensureAbsolutePath(rootDir);
@@ -147,7 +146,7 @@ async function processSingleFile(fullPath, rootDir, ignoreFilter, ignoreMode) {
       isSkipped: false,
       content: '',
       tokenCount: 0,
-      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir, ignoreMode),
+      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir),
     };
 
     if (stats.size > MAX_FILE_SIZE) {
@@ -180,7 +179,7 @@ async function processSingleFile(fullPath, rootDir, ignoreFilter, ignoreMode) {
       error: `Error: ${err.message}`,
       content: '',
       tokenCount: 0,
-      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir, ignoreMode),
+      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir),
     };
   }
 }
@@ -231,17 +230,7 @@ async function processDirectory({
 
   if (!shouldIgnorePath(fullPath, rootDir, currentDir, filterToUse, ignoreMode)) {
     progress.directories++;
-    // Pass ignoreMode to processSingleFile when setting up watcher
-    const processSingleFileCallback = (filePathCb, rootDirCb, ignoreFilterCb) =>
-      processSingleFile(filePathCb, rootDirCb, ignoreFilterCb, ignoreMode);
-
-    await watcher.initializeWatcher(
-      dir,
-      window,
-      ignoreFilter,
-      defaultIgnoreFilter,
-      processSingleFileCallback
-    );
+    await watcher.initializeWatcher(dir, window, ignoreFilter, defaultIgnoreFilter, processSingleFile);
     window.webContents.send('file-processing-status', {
       status: 'processing',
       message: `Scanning directories (${progress.directories} processed)... (Press ESC to cancel)`,

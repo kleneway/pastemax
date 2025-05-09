@@ -20,7 +20,7 @@ const ignore = require('ignore');
 // Global caches
 const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized root directory
 const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
-// let defaultExcludeFilter = null; // This will be handled differently now
+let defaultExcludeFilter = null; // Cache for default exclude ignore filter
 
 // Default ignore patterns that should always be applied
 const DEFAULT_PATTERNS = [
@@ -64,13 +64,18 @@ const defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS);
 
 /**
  * The function `shouldExcludeByDefault` determines whether a file should be excluded based on various
- * conditions including platform-specific paths and default/excluded file patterns based on mode.
- * @param filePath - The path of the file to check.
- * @param rootDir - The root directory for context.
- * @param ignoreMode - The current ignore mode ('automatic' or 'global').
- * @returns {boolean} True if the file should be excluded by default, false otherwise.
+ * conditions including platform-specific paths and a default exclusion filter.
+ * @param filePath - The `filePath` parameter represents the path of the file that is being checked for
+ * exclusion. It is used to determine if the file should be excluded based on certain criteria.
+ * @param rootDir - The `rootDir` parameter in the `shouldExcludeByDefault` function represents the
+ * root directory of the project or file system that is being analyzed. It is used to determine the
+ * relative path of the file being checked for exclusion.
+ * @returns The function `shouldExcludeByDefault` returns a boolean value. It returns `true` if the
+ * file should be excluded based on various conditions such as being a reserved Windows name, system
+ * path on Windows, macOS, or Linux, or if it matches the default exclusion filter. If none of these
+ * conditions are met, it returns `false`.
  */
-function shouldExcludeByDefault(filePath, rootDir, ignoreMode) {
+function shouldExcludeByDefault(filePath, rootDir) {
   filePath = ensureAbsolutePath(filePath);
   rootDir = ensureAbsolutePath(rootDir);
 
@@ -80,58 +85,58 @@ function shouldExcludeByDefault(filePath, rootDir, ignoreMode) {
     return true;
   }
 
-  // OS-specific and reserved name checks
   if (process.platform === 'win32') {
     if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(path.basename(filePath))) {
-      // console.log(`Excluding reserved Windows name: ${path.basename(filePath)}`);
+      console.log(`Excluding reserved Windows name: ${path.basename(filePath)}`);
       return true;
     }
+
     if (
       filePath.toLowerCase().includes('\\windows\\') ||
       filePath.toLowerCase().includes('\\system32\\')
     ) {
-      // console.log(`Excluding Windows system path: ${filePath}`);
+      console.log(`Excluding system path: ${filePath}`);
       return true;
     }
-  } else if (process.platform === 'darwin') {
+  }
+
+  if (process.platform === 'darwin') {
     if (
       filePath.includes('/.Spotlight-') ||
       filePath.includes('/.Trashes') ||
       filePath.includes('/.fseventsd')
     ) {
-      // console.log(`Excluding macOS system path: ${filePath}`);
+      console.log(`Excluding macOS system path: ${filePath}`);
       return true;
     }
-  } else if (process.platform === 'linux') {
+  }
+
+  if (process.platform === 'linux') {
     if (
       filePath.startsWith('/proc/') ||
       filePath.startsWith('/sys/') ||
       filePath.startsWith('/dev/')
     ) {
-      // console.log(`Excluding Linux system path: ${filePath}`);
+      console.log(`Excluding Linux system path: ${filePath}`);
       return true;
     }
   }
 
-  // Check against DEFAULT_PATTERNS (using the module-level defaultIgnoreFilter)
-  if (defaultIgnoreFilter.ignores(relativePath)) {
-    // console.log(`[shouldExcludeByDefault] Excluded by DEFAULT_PATTERNS: ${relativePath}`);
-    return true;
+  // Create the filter only once and reuse it
+  if (!defaultExcludeFilter) {
+    defaultExcludeFilter = ignore().add(excludedFiles);
+    console.log(`[Default Exclude] Initialized filter with ${excludedFiles.length} excluded files`);
   }
 
-  // If in 'global' mode, also check against excludedFiles
-  if (ignoreMode === 'global') {
-    // It's important that excludedFiles are not empty, otherwise ignore() might behave unexpectedly.
-    if (excludedFiles && excludedFiles.length > 0) {
-      const globalExcludedFilesFilter = ignore().add(excludedFiles);
-      if (globalExcludedFilesFilter.ignores(relativePath)) {
-        // console.log(`[shouldExcludeByDefault] Excluded by excludedFiles (Global Mode): ${relativePath}`);
-        return true;
-      }
-    }
+  const isExcluded = defaultExcludeFilter.ignores(relativePath);
+
+  // Only log exclusions periodically to reduce spam
+  if (isExcluded && Math.random() < 0.05) {
+    // Log ~5% of exclusions as samples
+    console.log(`[Default Exclude] Excluded file: ${relativePath}`);
   }
 
-  return false;
+  return isExcluded;
 }
 
 /**
@@ -420,12 +425,12 @@ async function loadGitignore(rootDir) {
   const ig = ignore();
 
   try {
-    // Automatic mode starts with only DEFAULT_PATTERNS
-    const initialPatterns = [...DEFAULT_PATTERNS];
+    // Combine default patterns with excludedFiles
+    const defaultPatterns = [...DEFAULT_PATTERNS, ...excludedFiles];
 
-    ig.add(initialPatterns);
+    ig.add(defaultPatterns);
     console.log(
-      `[Automatic Mode] Added ${initialPatterns.length} default patterns (excludedFiles.js not used for main filter)`
+      `[Automatic Mode] Added ${DEFAULT_PATTERNS.length} default patterns and ${excludedFiles.length} excluded files`
     );
 
     const gitignoreMap = await collectGitignoreMapRecursive(rootDir, rootDir);
@@ -436,17 +441,17 @@ async function loadGitignore(rootDir) {
     for (const [relativeDirPath, patterns] of gitignoreMap) {
       patternOrigins.set(relativeDirPath, patterns);
 
-      // Add patterns to root filter
+      // Add patterns to root filter (for backward compatibility)
       const patternsToAdd = patterns.map((pattern) => {
-        // Ensure patterns are correctly relative to the rootDir
-        if (pattern.startsWith('/')) { // Anchored to .gitignore's location's root
-          return normalizePath(path.join(relativeDirPath === '.' ? '' : relativeDirPath, pattern.substring(1)));
+        if (!pattern.startsWith('/') && !pattern.includes('**')) {
+          const joinedPath = normalizePath(
+            path.join(relativeDirPath === '.' ? '' : relativeDirPath, pattern)
+          );
+          return joinedPath.replace(/^\.\//, '');
+        } else if (pattern.startsWith('/')) {
+          return pattern.substring(1);
         }
-        // For patterns like 'file.txt' or 'dir/', they apply to the .gitignore's directory and subdirs
-        // For patterns like '**/foo' or 'foo/**' they are more global within the scope of that .gitignore
-        // The ignore library handles this if paths are relative to the .gitignore's location.
-        // We make them relative to rootDir here.
-        return normalizePath(path.join(relativeDirPath === '.' ? '' : relativeDirPath, pattern));
+        return pattern;
       });
 
       if (patternsToAdd.length > 0) {
@@ -460,7 +465,7 @@ async function loadGitignore(rootDir) {
 
     if (totalGitignorePatterns > 0) {
       console.log(
-        `[Automatic Mode] Added ${totalGitignorePatterns} repository-specific patterns (combined with ${initialPatterns.length} default patterns) for:`,
+        `[Automatic Mode] Added ${totalGitignorePatterns} repository-specific patterns (combined with ${defaultPatterns.length} default patterns) for:`,
         rootDir
       );
     }
