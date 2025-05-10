@@ -19,9 +19,9 @@
 
 PasteMax is a simple desktop app built for developers using AI coding assistants. It makes sharing your code with LLMs easy, thanks to a smart file explorer with token counting, file filtering, quick copy, and a previewer. Select the files you need, skip binaries and junk, and get clean, formatted snippets ready for your LLM.
 
-![PasteMax](https://github.com/user-attachments/assets/85ac9935-5ff9-45b2-b9fe-6b6cbdcdf6e7)
-![IgnoreList](https://github.com/user-attachments/assets/25c4a56f-1470-4a91-a0f1-fe8d439e435d)
-![FilePreviewer](https://github.com/user-attachments/assets/8f98fcca-3557-4225-92f4-38387cf6e843)
+![PasteMax](https://github.com/user-attachments/assets/d2a2cecc-47aa-4c14-a2b8-db9c2213d8da)
+![IgnoreList](https://github.com/user-attachments/assets/24e44bd2-710c-476e-85d1-26814476e4ba)
+![FilePreview](https://github.com/user-attachments/assets/432661ab-ff05-42b0-85d4-3f9b40fe1fd4)
 
 ## Video
 
@@ -29,16 +29,17 @@ PasteMax is a simple desktop app built for developers using AI coding assistants
 
 ## Features
 
-- **File Tree Navigation**: Browse directories and files with an expandable tree view
-- **Token Counting**: View the approximate token count for each file (useful for LLM context limits)
-- **Search Capabilities**: Quickly find files by name or content
-- **Selection Management**: Select multiple files and copy their contents together
-- **Sorting Options**: Sort files by name, size, or token count
-- **File Previewer**: View file contents in a dedicated preview pane
-- **Dark Mode**: Toggle between light and dark themes for comfortable viewing in any environment
-- **Binary File Detection**: Automatic detection and exclusion of binary files
-- **Smart File Exclusion**: Automatically excludes common files like package-lock.json, binary files, and more by default
-- **File Change Watcher**: Automatically updates the files whenever changes are detected
+- **File Tree Navigation**: Browse directories and files with an expandable tree view.
+- **Token Counting**: View the approximate token count for each file (useful for LLM context limits).
+- **Search Capabilities**: Quickly find files by name or content.
+- **Selection Management**: Select multiple files and copy their contents together.
+- **Sorting Options**: Sort files by name, size, or token count.
+- **File Previewer**: View file contents in a dedicated preview pane.
+- **Dark Mode**: Toggle between light and dark themes for comfortable viewing in any environment.
+- **Binary File Detection**: Automatic detection and exclusion of binary files.
+- **Smart File Exclusion**: Automatically excludes common files like package-lock.json, binary files, and more by default.
+- **File Change Watcher**: Automatically updates the files whenever changes are detected.
+- **Automatic Update Checker**: Automatically check for new updates from Latest Github Release.
 
 ## Installation
 
