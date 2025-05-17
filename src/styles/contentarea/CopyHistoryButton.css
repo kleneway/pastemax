@@ -1,0 +1,36 @@
+/* ==========================================================================
+   Copy History Button Styles
+   ========================================================================== */
+
+.copy-history-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: var(--standard-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.copy-history-button:hover {
+  background-color: var(--hover-color);
+  color: var(--text-primary);
+}
+
+.copy-history-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Position in the copy button container */
+.copy-history-button-position {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}

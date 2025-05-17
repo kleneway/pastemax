@@ -15,6 +15,8 @@ import CustomTaskTypeModal from './components/CustomTaskTypeModal';
 import TaskTypeSelector from './components/TaskTypeSelector';
 import WorkspaceManager from './components/WorkspaceManager';
 import { Workspace } from './types/WorkspaceTypes';
+import CopyHistoryModal, { CopyHistoryItem } from './components/CopyHistoryModal';
+import CopyHistoryButton from './components/CopyHistoryButton';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -62,6 +64,7 @@ const STORAGE_KEYS = {
   TASK_TYPE: STORAGE_KEY_TASK_TYPE,
   WORKSPACES: 'pastemax-workspaces',
   CURRENT_WORKSPACE: 'pastemax-current-workspace',
+  COPY_HISTORY: 'pastemax-copy-history',
 };
 
 /* ============================== MAIN APP COMPONENT ============================== */
@@ -169,6 +172,20 @@ const App = (): JSX.Element => {
    */
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const lastSentIgnoreSettingsModifiedRef = useRef(null as boolean | null);
+
+  /* ============================== STATE: Copy History ============================== */
+  const [copyHistory, setCopyHistory] = useState(() => {
+    const savedHistory = localStorage.getItem(STORAGE_KEYS.COPY_HISTORY);
+    if (savedHistory) {
+      try {
+        return JSON.parse(savedHistory) as CopyHistoryItem[];
+      } catch {
+        return [] as CopyHistoryItem[];
+      }
+    }
+    return [] as CopyHistoryItem[];
+  });
+  const [isCopyHistoryModalOpen, setIsCopyHistoryModalOpen] = useState(false);
 
   // Utility function to clear all saved state and reset the app
   const clearSavedState = useCallback(() => {
@@ -1254,6 +1271,17 @@ const App = (): JSX.Element => {
       await navigator.clipboard.writeText(content);
       setProcessingStatus({ status: 'complete', message: 'Copied to clipboard!' });
 
+      // Add to copy history
+      const newHistoryItem: CopyHistoryItem = {
+        content,
+        timestamp: Date.now(),
+        label: `${selectedFiles.length} files`,
+      };
+
+      const updatedHistory = [newHistoryItem, ...copyHistory].slice(0, 20); // Keep last 20 items
+      setCopyHistory(updatedHistory);
+      localStorage.setItem(STORAGE_KEYS.COPY_HISTORY, JSON.stringify(updatedHistory));
+
       // Reset the status after 2 seconds
       setTimeout(() => {
         setProcessingStatus({ status: 'idle', message: '' });
@@ -1262,6 +1290,28 @@ const App = (): JSX.Element => {
       console.error('Failed to copy:', err);
       setProcessingStatus({ status: 'error', message: 'Failed to copy to clipboard' });
     }
+  };
+
+  // Handle copy from history
+  const handleCopyFromHistory = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setProcessingStatus({ status: 'complete', message: 'Copied to clipboard!' });
+
+      // Reset the status after 2 seconds
+      setTimeout(() => {
+        setProcessingStatus({ status: 'idle', message: '' });
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      setProcessingStatus({ status: 'error', message: 'Failed to copy to clipboard' });
+    }
+  };
+
+  // Clear copy history
+  const handleClearCopyHistory = () => {
+    setCopyHistory([]);
+    localStorage.removeItem(STORAGE_KEYS.COPY_HISTORY);
   };
 
   const handleManageCustomTaskTypes = () => {
@@ -1574,6 +1624,10 @@ const App = (): JSX.Element => {
                   COPY ALL SELECTED ({selectedFiles.length} files)
                 </span>
               </button>
+              <CopyHistoryButton
+                onClick={() => setIsCopyHistoryModalOpen(true)}
+                className="copy-history-button-position"
+              />
             </div>
           </div>
         </div>
@@ -1609,6 +1663,13 @@ const App = (): JSX.Element => {
           onDeleteWorkspace={handleDeleteWorkspace}
           onUpdateWorkspaceFolder={handleUpdateWorkspaceFolder}
           selectedFolder={selectedFolder}
+        />
+        <CopyHistoryModal
+          isOpen={isCopyHistoryModalOpen}
+          onClose={() => setIsCopyHistoryModalOpen(false)}
+          copyHistory={copyHistory}
+          onCopyItem={handleCopyFromHistory}
+          onClearHistory={handleClearCopyHistory}
         />
       </div>
     </ThemeProvider>

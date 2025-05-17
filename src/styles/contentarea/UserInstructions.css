@@ -3,6 +3,7 @@
   padding: var(--space-md) var(--space-lg);
   background-color: var(--background-primary);
   flex-shrink: 0; /* Prevent shrinking */
+  position: relative; /* For resize handle positioning */
 }
 
 .user-instructions {
@@ -21,7 +22,7 @@
   font-family: var(--font-family-ui); /* Use UI font */
   font-size: 14px;
   line-height: 1.5;
-  resize: vertical; /* Allow vertical resize */
+  resize: none; /* Disable browser's default resize, we're adding custom handles */
   transition:
     border-color 0.2s,
     box-shadow 0.2s,
@@ -38,6 +39,50 @@
 .user-instructions textarea::placeholder {
   color: var(--text-secondary);
 }
+
+/* -------------------- User Instructions Resize Handles -------------------- */
+.instructions-resize-handle-vertical {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px; /* Increased from 4px */
+  cursor: ns-resize;
+  z-index: 10;
+  background-color: transparent;
+  will-change: transform; /* Optimize for performance */
+}
+
+.instructions-resize-handle-horizontal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px; /* Increased from 4px */
+  cursor: ew-resize;
+  z-index: 10;
+  background-color: transparent;
+  will-change: transform; /* Optimize for performance */
+}
+
+.instructions-resize-handle-corner {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px; /* Increased from 12px */
+  height: 14px; /* Increased from 12px */
+  cursor: nwse-resize;
+  z-index: 11; /* Above other handles */
+  background-color: transparent;
+}
+
+.instructions-resize-handle-vertical:hover,
+.instructions-resize-handle-horizontal:hover,
+.instructions-resize-handle-corner:hover {
+  background-color: var(--color-primary);
+  opacity: 0.2;
+}
+
 .dark-mode .user-instructions-container {
   border-color: var(--border-color);
 }
@@ -54,4 +99,12 @@
 
 .dark-mode .user-instructions textarea {
   background-color: var(--background-secondary);
+}
+
+/* Dark mode handlers */
+.dark-mode .instructions-resize-handle-vertical:hover,
+.dark-mode .instructions-resize-handle-horizontal:hover,
+.dark-mode .instructions-resize-handle-corner:hover {
+  background-color: var(--color-primary);
+  opacity: 0.4;
 }

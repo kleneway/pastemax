@@ -1,0 +1,297 @@
+/* ==========================================================================
+   Copy History Modal Styles
+   ========================================================================== */
+
+/* ----- Base Modal Styles ----- */
+.copy-history-modal-overlay,
+.copy-detail-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  animation: fadeIn 0.2s ease-out;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: opacity 0.2s ease;
+}
+
+.copy-history-modal,
+.copy-detail-modal {
+  background-color: var(--background-primary);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  max-height: 90vh;
+  padding: 0;
+  outline: none;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.25s ease-out;
+  will-change: transform, opacity;
+}
+
+/* Copy history modal size */
+.copy-history-modal {
+  width: 95%;
+  max-width: 550px;
+}
+
+/* Detail view modal size */
+.copy-detail-modal {
+  width: 95%;
+  max-width: 750px;
+}
+
+/* ----- Header Styles ----- */
+.copy-history-modal-header,
+.copy-detail-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--background-secondary);
+  min-height: 48px;
+}
+
+.copy-history-modal-header h3,
+.copy-detail-modal-header h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.copy-history-modal-close-button,
+.copy-detail-modal-close-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.copy-history-modal-close-button:hover,
+.copy-history-modal-close-button:focus-visible,
+.copy-detail-modal-close-button:hover,
+.copy-detail-modal-close-button:focus-visible {
+  color: var(--text-primary);
+  background-color: var(--hover-color);
+}
+
+/* ----- Content Styles ----- */
+.copy-history-modal-content,
+.copy-detail-modal-content {
+  padding: var(--space-md);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.copy-history-modal-content {
+  max-height: calc(90vh - 48px);
+}
+
+.copy-detail-modal-content {
+  max-height: calc(80vh - 48px);
+}
+
+/* ----- Copy History List Styles ----- */
+.copy-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  gap: var(--space-md);
+  color: var(--text-secondary);
+}
+
+.copy-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 35vh;
+  overflow-y: auto;
+}
+
+.copy-history-item {
+  padding: var(--space-sm);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+  background-color: var(--background-secondary);
+}
+
+.copy-history-item:hover {
+  background-color: var(--hover-color);
+}
+
+.copy-history-item.selected {
+  border-color: var(--color-primary);
+  background-color: var(--background-secondary);
+}
+
+.copy-history-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.copy-history-item-date {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.copy-history-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.copy-history-item-copy-button,
+.copy-history-item-expand-button {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-history-item-copy-button:hover,
+.copy-history-item-expand-button:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.copy-history-item-preview {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+
+/* ----- Detail View Styles ----- */
+.copy-history-detail {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: var(--space-sm);
+  background-color: var(--background-secondary);
+}
+
+.copy-history-detail h4 {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: var(--font-size-md);
+  color: var(--text-primary);
+}
+
+.copy-history-detail-content {
+  background-color: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: var(--space-sm);
+  font-family: monospace;
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  color: var(--text-primary);
+  max-height: 25vh;
+  overflow-y: auto;
+}
+
+.copy-history-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
+}
+
+.copy-detail-date {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.copy-detail-content {
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: var(--space-md);
+  font-family: monospace;
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  color: var(--text-primary);
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+/* ----- Button Styles ----- */
+.copy-history-copy-button,
+.copy-detail-copy-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: background-color 0.2s ease;
+}
+
+.copy-history-copy-button:hover,
+.copy-detail-copy-button:hover {
+  background-color: var(--hover-color);
+}
+
+.copy-history-footer,
+.copy-detail-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-sm);
+}
+
+.copy-history-clear-button {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  background-color: var(--background-secondary);
+  color: var(--text-danger);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  transition: background-color 0.2s ease;
+}
+
+.copy-history-clear-button:hover {
+  background-color: var(--hover-color);
+}

@@ -11,6 +11,7 @@
   flex-shrink: 0; /* Prevent shrinking */
   gap: var(--space-md); /* Horizontal gap between elements */
   margin-top: var(--space-md);
+  position: relative; /* Add position relative for absolute positioning of settings button */
 }
 
 /* Optional: Add a label for the copy button */
@@ -165,4 +166,12 @@
   .copy-button-text {
     font-size: 13px;
   }
+}
+
+/* Settings button positioning in copy button container */
+.copy-history-settings-button {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
 }
