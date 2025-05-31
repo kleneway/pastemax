@@ -1,0 +1,220 @@
+.chat-history-sidebar {
+  width: 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  background-color: var(--background-secondary);
+  overflow: hidden;
+}
+
+.chat-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chat-history-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.new-chat-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-primary);
+  color: var(--text-on-primary);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.new-chat-button:hover {
+  background-color: var(--color-primary-dark);
+}
+
+.chat-history-search {
+  padding: 12px 16px;
+  position: relative;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chat-history-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  padding-right: 30px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--background-primary);
+  font-size: 13px;
+}
+
+.chat-history-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.chat-history-search-clear {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.chat-history-search-clear:hover {
+  background-color: var(--hover-color);
+  color: var(--text-primary);
+}
+
+.chat-history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.chat-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.chat-history-empty p {
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.start-new-chat-button {
+  padding: 8px 16px;
+  background-color: var(--color-primary);
+  color: var(--text-on-primary);
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.start-new-chat-button:hover {
+  background-color: var(--color-primary-dark);
+}
+
+.chat-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: var(--border-radius-md);
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-history-item:hover {
+  background-color: var(--hover-color);
+}
+
+.chat-history-item.active {
+  background-color: var(--background-selected);
+  border-left: 3px solid var(--color-primary);
+}
+
+.chat-session-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-session-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-session-title i {
+  font-style: normal;
+}
+
+.chat-session-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.delete-session-button {
+  opacity: 0.2;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.2s,
+    background-color 0.2s;
+}
+
+.chat-history-item:hover .delete-session-button {
+  opacity: 0.6;
+}
+
+.delete-session-button:hover {
+  opacity: 1 !important;
+  background-color: var(--active-color);
+}
+
+/* Dark mode adjustments */
+.dark-mode .chat-history-sidebar {
+  background-color: var(--background-secondary);
+  border-right-color: var(--border-color);
+}
+
+.dark-mode .chat-history-header {
+  border-bottom-color: var(--border-color);
+}
+
+.dark-mode .chat-history-search-input {
+  background-color: var(--background-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-mode .chat-history-item.active {
+  background-color: var(--background-selected);
+}
+
+.dark-mode .delete-session-button {
+  color: var(--text-primary);
+}

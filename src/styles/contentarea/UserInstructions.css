@@ -4,12 +4,15 @@
   background-color: var(--background-primary);
   flex-shrink: 0; /* Prevent shrinking */
   position: relative; /* For resize handle positioning */
+  display: flex; /* Added to allow actions to be part of the flex flow if needed */
+  flex-direction: column; /* Ensures textarea and actions stack vertically */
 }
 
 .user-instructions {
   position: relative; /* Changed from absolute, for resize handle positioning */
   max-width: 100%; /* Keep this to ensure it doesn't overflow its container's width */
   /* width and height are set via inline styles by the component's JS */
+  flex-grow: 1; /* Allows textarea container to fill space */
 }
 
 .user-instructions textarea {
@@ -112,3 +115,89 @@
   background-color: var(--color-primary);
   opacity: 0.4;
 }
+
+/* NEW STYLES FOR BUTTON AND ITS CONTAINER */
+.user-instructions-actions {
+  display: flex;
+  justify-content: flex-end; /* Align button to the right */
+  padding-top: var(--space-sm); /* Spacing from the textarea or content above */
+  /* If you want it outside the main bordered/padded container, adjust padding/margin */
+}
+
+.send-to-ai-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs); /* Smaller gap for icon and text */
+  padding: var(--space-xs) var(--space-sm); /* Adjust padding to match other similar buttons */
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--border-radius-sm);
+  transition: all 0.2s var(--animation-curve);
+  white-space: nowrap;
+  cursor: pointer;
+
+  /* Assuming you have app-button and primary-button utility classes for base styling */
+  /* If not, define base button styles here or use existing button classes */
+  /* Example of direct styling (adapt to your theme variables): */
+  color: var(--text-on-primary, #ffffff);
+  background-color: var(--color-primary, #007bff);
+  border: 1px solid var(--color-primary, #007bff);
+  box-shadow: var(--shadow-xs);
+}
+
+.send-to-ai-button svg {
+  /* Minor adjustment if icon looks too large or small */
+  /* width: 1em; height: 1em; */
+}
+
+.send-to-ai-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark, #0056b3);
+  border-color: var(--color-primary-dark, #0056b3);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.send-to-ai-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-xs);
+}
+
+.send-to-ai-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  /* Styles for disabled state - ensure they align with your theme */
+  background-color: var(--background-modifier-disabled, #e9ecef);
+  color: var(--text-disabled, #6c757d);
+  border-color: var(--border-color-disabled, #ced4da);
+  box-shadow: none;
+}
+
+/* Dark mode adjustments (if you have a .dark-mode class on a parent) */
+.dark-mode .send-to-ai-button:not(:disabled) {
+  color: var(--dm-text-on-primary, #ffffff);
+  background-color: var(--dm-color-primary, #007bff);
+  border-color: var(--dm-color-primary, #007bff);
+}
+
+.dark-mode .send-to-ai-button:hover:not(:disabled) {
+  background-color: var(--dm-color-primary-dark, #0056b3);
+  border-color: var(--dm-color-primary-dark, #0056b3);
+}
+
+.dark-mode .send-to-ai-button:disabled {
+  background-color: var(--dm-background-modifier-disabled, #343a40);
+  color: var(--dm-text-disabled, #adb5bd);
+  border-color: var(--dm-border-color-disabled, #495057);
+}
+
+/* Add styles for resize handles if they are not already comprehensively styled */
+.instructions-resize-handle-vertical,
+.instructions-resize-handle-horizontal,
+.instructions-resize-handle-corner {
+  /* ... your existing styles for resize handles ... */
+  /* background: var(--border-color, #ccc); */
+  /* position: absolute; */
+  /* z-index: 10; */
+}
+
+/* ... any other existing styles ... */

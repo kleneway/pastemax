@@ -52,6 +52,8 @@ export interface FileListProps {
   files: FileData[];
   selectedFiles: string[];
   toggleFileSelection: (filePath: string) => void;
+  onChatAbout?: (filePath: string) => void;
+  isLlmConfigured?: boolean;
 }
 
 export interface FileCardProps {

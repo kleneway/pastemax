@@ -6,6 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const watcher = require('./watcher.js');
 const { getUpdateStatus, resetUpdateSessionState } = require('./update-manager');
+const {
+  getAllLlmConfigsFromStore,
+  setAllLlmConfigsInStore,
+  sendPromptToLlm,
+  cancelLlmRequestInService,
+} = require('./llmService');
 // GlobalModeExclusion is now in ignore-manager.js
 
 // Configuration constants
@@ -116,6 +122,50 @@ async function cancelDirectoryLoading(window, reason = 'user') {
 // ======================
 // IPC HANDLERS
 // ======================
+
+// LLM Service Handlers
+ipcMain.handle('llm:get-config', async () => {
+  try {
+    const configs = await getAllLlmConfigsFromStore();
+    return configs;
+  } catch (error) {
+    console.error('Error getting LLM configs:', error);
+    return { error: error.message };
+  }
+});
+
+ipcMain.handle('llm:set-config', async (_event, configs) => {
+  try {
+    await setAllLlmConfigsInStore(configs);
+    return { success: true };
+  } catch (error) {
+    console.error('Error setting LLM configs:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('llm:send-prompt', async (_event, params) => {
+  try {
+    console.log(
+      '[Main IPC Handler] llm:send-prompt - received params.messages:',
+      JSON.stringify(params.messages, null, 2)
+    ); // Log messages
+    return await sendPromptToLlm(params);
+  } catch (error) {
+    console.error('Error sending prompt to LLM:', error);
+    return { error: error.message };
+  }
+});
+
+ipcMain.handle('llm:cancel-request', async (_event, requestId) => {
+  try {
+    return await cancelLlmRequestInService(requestId);
+  } catch (error) {
+    console.error('Error cancelling LLM request:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('check-for-updates', async (event) => {
   console.log("Main Process: IPC 'check-for-updates' handler INVOKED.");
   try {
@@ -642,7 +692,9 @@ function createWindow() {
   });
 
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+    const devUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173'; // Use env var, fallback if not set
+    console.log(`[Main Process] Development mode: Loading URL: ${devUrl}`);
+    mainWindow.loadURL(devUrl);
     mainWindow.webContents.openDevTools();
   } else {
     const prodPath = app.isPackaged

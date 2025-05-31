@@ -5,7 +5,9 @@ import React, {
   useRef,
   //MouseEvent as ReactMouseEvent,
 } from 'react';
-import { DEFAULT_TASK_TYPES, STORAGE_KEY_CUSTOM_TASK_TYPES } from '../types/TaskTypes';
+import { DEFAULT_TASK_TYPES, STORAGE_KEY_CUSTOM_TASK_TYPES, TaskType } from '../types/TaskTypes';
+import { MessageSquare } from 'lucide-react'; // Added MessageSquare
+import '../styles/contentarea/UserInstructions.css';
 
 /**
  * Props interface for the UserInstructions component
@@ -17,6 +19,7 @@ interface UserInstructionsProps {
   instructions: string;
   setInstructions: (value: string) => void;
   selectedTaskType: string;
+  onSendToAIClicked: (instructions: string) => void; // <-- NEW PROP
 }
 
 /**
@@ -37,8 +40,9 @@ const UserInstructions = ({
   instructions,
   setInstructions,
   selectedTaskType,
+  onSendToAIClicked, // <-- ACCEPT PROP
 }: UserInstructionsProps): JSX.Element => {
-  const [allTaskTypes, setAllTaskTypes] = useState(DEFAULT_TASK_TYPES);
+  const [allTaskTypes, setAllTaskTypes] = useState<TaskType[]>(DEFAULT_TASK_TYPES);
 
   // State for resizing
   const [instructionsHeight, setInstructionsHeight] = useState(126); // Default height
@@ -53,90 +57,57 @@ const UserInstructions = ({
   const initialMousePosRef = useRef({ x: 0, y: 0 });
   const initialContainerHeightRef = useRef<number>(0);
   // Container ref for width calculation
-  const containerRef = useRef(null as HTMLDivElement | null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Min/max constraints
-  const MIN_HEIGHT = 80;
-  const MAX_HEIGHT = 600;
-  const MIN_WIDTH_PERCENT = 30;
+  const MIN_HEIGHT = 50;
+  const MAX_HEIGHT = 500;
+  const MIN_WIDTH_PERCENT = 20;
   const MAX_WIDTH_PERCENT = 100;
 
   // Load custom task types
   useEffect(() => {
-    const loadCustomTaskTypes = () => {
-      const savedCustomTypes = localStorage.getItem(STORAGE_KEY_CUSTOM_TASK_TYPES);
-      if (savedCustomTypes) {
-        try {
-          const customTypes = JSON.parse(savedCustomTypes);
-          setAllTaskTypes([...DEFAULT_TASK_TYPES, ...customTypes]);
-        } catch (error) {
-          console.error('Error parsing custom task types:', error);
-        }
+    const storedTaskTypes = localStorage.getItem(STORAGE_KEY_CUSTOM_TASK_TYPES);
+    let combinedTaskTypes = [...DEFAULT_TASK_TYPES]; // Start with defaults
+
+    if (storedTaskTypes) {
+      try {
+        const parsedCustomTasks = JSON.parse(storedTaskTypes) as TaskType[];
+        // Filter out any default tasks that might have the same ID as a custom task to give custom priority
+        const defaultTasksFiltered = DEFAULT_TASK_TYPES.filter(
+          (defaultTask) => !parsedCustomTasks.some((customTask) => customTask.id === defaultTask.id)
+        );
+        combinedTaskTypes = [...defaultTasksFiltered, ...parsedCustomTasks];
+        // console.log('Combined task types:', combinedTaskTypes);
+      } catch (error) {
+        console.error('Error parsing or merging custom task types from localStorage:', error);
+        // Fallback to just defaults if parsing/merging fails
+        combinedTaskTypes = [...DEFAULT_TASK_TYPES];
       }
-    };
-
-    // Initial load
-    loadCustomTaskTypes();
-
-    // Listen for our custom event for task type updates
-    const handleCustomTaskTypesUpdated = () => {
-      loadCustomTaskTypes();
-    };
-
-    // Listen for both events
-    window.addEventListener('customTaskTypesUpdated', handleCustomTaskTypesUpdated);
-
-    return () => {
-      window.removeEventListener('customTaskTypesUpdated', handleCustomTaskTypesUpdated);
-    };
-  }, []);
+    }
+    setAllTaskTypes(combinedTaskTypes);
+  }, []); // Empty dependency array means this runs once on mount
 
   // Update instructions when task type changes
   useEffect(() => {
-    // Find the selected task type - load most current version from localStorage
-    const loadCurrentTaskType = () => {
-      // First check in memory
-      let selectedTask = allTaskTypes.find((type: any) => type.id === selectedTaskType);
-
-      // If not found or to ensure latest version, check localStorage for custom types
-      if (!selectedTask || selectedTask.isCustom) {
-        const savedCustomTypes = localStorage.getItem(STORAGE_KEY_CUSTOM_TASK_TYPES);
-        if (savedCustomTypes) {
-          try {
-            const customTypes = JSON.parse(savedCustomTypes);
-            const freshCustomTask = customTypes.find((type: any) => type.id === selectedTaskType);
-            if (freshCustomTask) {
-              selectedTask = freshCustomTask;
-            }
-          } catch (error) {
-            console.error('Error finding custom task type:', error);
-          }
-        }
-      }
-
-      // If we found the task, update instructions
-      if (selectedTask) {
-        setInstructions(selectedTask.prompt);
-      }
-    };
-
-    loadCurrentTaskType();
-
-    // Also listen for task type updates
-    const handleCustomTaskTypesUpdated = () => {
-      loadCurrentTaskType();
-    };
-
-    window.addEventListener('customTaskTypesUpdated', handleCustomTaskTypesUpdated);
-
-    return () => {
-      window.removeEventListener('customTaskTypesUpdated', handleCustomTaskTypesUpdated);
-    };
+    const currentTask = allTaskTypes.find((task) => task.id === selectedTaskType);
+    if (currentTask) {
+      setInstructions(currentTask.prompt || '');
+    } else {
+      // If selectedTaskType is not found (e.g., after deleting a custom task type)
+      // fall back to a sensible default, like the first task or a specific 'none' or 'default-general' task
+      // For now, let's try to find a task with id 'default-general' or the first task if not found.
+      const fallbackTask =
+        allTaskTypes.find((task) => task.id === 'default-general') || allTaskTypes[0];
+      setInstructions(fallbackTask?.prompt || '');
+      // If selectedTaskType was valid but its prompt was empty, it would have set to '' above.
+      // This else block handles cases where selectedTaskType ID itself is no longer in allTaskTypes.
+    }
   }, [selectedTaskType, setInstructions, allTaskTypes]);
 
   // Resize handlers
   const handleVerticalResizeStart = useCallback(
-    (e: any) => {
+    (e: React.MouseEvent<HTMLDivElement>) => {
       e.preventDefault();
       setIsResizingVertical(true);
       initialMousePosRef.current.y = e.clientY;
@@ -145,13 +116,13 @@ const UserInstructions = ({
     [containerHeight, instructionsHeight, containerVPadding]
   );
 
-  const handleHorizontalResizeStart = useCallback((e: any) => {
+  const handleHorizontalResizeStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsResizingHorizontal(true);
     initialMousePosRef.current.x = e.clientX;
   }, []);
 
-  const handleCornerResizeStart = useCallback((e: any) => {
+  const handleCornerResizeStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsResizingCorner(true);
     initialMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -224,21 +195,23 @@ const UserInstructions = ({
     isResizingCorner,
     instructionsHeight,
     instructionsWidth,
+    containerHeight,
+    containerVPadding,
   ]);
 
   // Save resize dimensions to localStorage
   useEffect(() => {
-    localStorage.setItem('pastemax-instructions-height', instructionsHeight.toString());
     localStorage.setItem('pastemax-instructions-width', instructionsWidth.toString());
+    localStorage.setItem('pastemax-instructions-height', instructionsHeight.toString());
     if (containerHeight !== null) {
       localStorage.setItem('pastemax-instructions-container-height', containerHeight.toString());
     }
-  }, [instructionsHeight, instructionsWidth, containerHeight]);
+  }, [instructionsWidth, instructionsHeight, containerHeight]);
 
   // Load saved dimensions and calculate container padding on mount
   useEffect(() => {
-    const savedHeight = localStorage.getItem('pastemax-instructions-height');
     const savedWidth = localStorage.getItem('pastemax-instructions-width');
+    const savedHeight = localStorage.getItem('pastemax-instructions-height');
     const savedContainerHeight = localStorage.getItem('pastemax-instructions-container-height');
 
     let initialHeight = 126;
@@ -248,7 +221,7 @@ const UserInstructions = ({
     }
 
     if (savedWidth) {
-      setInstructionsWidth(parseInt(savedWidth, 10));
+      setInstructionsWidth(parseFloat(savedWidth));
     }
 
     // Calculate container vertical padding
@@ -268,6 +241,27 @@ const UserInstructions = ({
       }
     }
   }, []);
+
+  // Update containerVPadding when component mounts or styles change
+  useEffect(() => {
+    if (containerRef.current) {
+      const computedStyle = getComputedStyle(containerRef.current);
+      const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+      const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+      setContainerVPadding(paddingTop + paddingBottom);
+
+      // Initialize containerHeight if not already set from localStorage
+      if (localStorage.getItem('pastemax-instructions-container-height') === null) {
+        setContainerHeight(instructionsHeight + paddingTop + paddingBottom);
+      }
+    }
+  }, [instructionsHeight]); // Recalculate if instructionsHeight changes and no saved container height
+
+  const handleSendClick = () => {
+    if (instructions.trim()) {
+      onSendToAIClicked(instructions.trim());
+    }
+  };
 
   return (
     <>
@@ -293,7 +287,7 @@ const UserInstructions = ({
             id="userInstructionsInput"
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
-            placeholder="Enter your instructions here..."
+            placeholder="Enter your instructions here... These will be appended to the copied file content."
             style={{
               height: '100%',
             }}
@@ -317,6 +311,16 @@ const UserInstructions = ({
             onMouseDown={handleCornerResizeStart}
             title="Drag to resize"
           ></div>
+        </div>
+        <div className="user-instructions-actions">
+          <button
+            className="send-to-ai-button app-button primary-button"
+            onClick={handleSendClick}
+            disabled={!instructions.trim()}
+            title="Send these instructions to the AI Chat"
+          >
+            <MessageSquare size={16} /> Send to AI
+          </button>
         </div>
       </div>
     </>

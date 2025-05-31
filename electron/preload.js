@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('electron', {
       'request-file-list',
       'debug-file-selection',
       'cancel-directory-loading',
+      'set-ignore-mode',
     ];
     if (validChannels.includes(channel)) {
       // Ensure data is serializable before sending
@@ -113,7 +114,11 @@ contextBridge.exposeInMainWorld('electron', {
         'check-for-updates',
         'get-token-count',
         'fetch-models',
-      ]; // Added 'fetch-models'
+        'llm:get-config',
+        'llm:set-config',
+        'llm:send-prompt',
+        'llm:cancel-request',
+      ]; // Added LLM channels
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, data);
       }
@@ -122,4 +127,42 @@ contextBridge.exposeInMainWorld('electron', {
       return Promise.reject(new Error(`Unhandled IPC invoke channel: ${channel}`));
     },
   },
+});
+
+// Expose LLM API to renderer process
+contextBridge.exposeInMainWorld('llmApi', {
+  /**
+   * Gets the current LLM configuration
+   * @returns {Promise<import('../src/types/llmTypes').AllLlmConfigs>}
+   */
+  getAllConfigs: () => ipcRenderer.invoke('llm:get-config'),
+
+  /**
+   * Sets the LLM configuration
+   * @param {import('../src/types/llmTypes').AllLlmConfigs} configs - The AllLlmConfigs object
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  setAllConfigs: (configs) => ipcRenderer.invoke('llm:set-config', ensureSerializable(configs)),
+
+  /**
+   * Sends a prompt to the LLM
+   * @param {Object} params - Parameters for the prompt
+   * @param {Array} params.messages - Array of message objects with role and content
+   * @param {string} params.requestId - A unique ID for this request
+   * @returns {Promise<{content: string, error?: string, cancelled?: boolean}>}
+   */
+  sendPrompt: (params) => {
+    console.log(
+      '[Preload] llmApi.sendPrompt - params.messages:',
+      JSON.stringify(params.messages, null, 2)
+    ); // Log messages
+    return ipcRenderer.invoke('llm:send-prompt', ensureSerializable(params));
+  },
+
+  /**
+   * Cancels an ongoing LLM request.
+   * @param requestId The ID of the request to cancel.
+   * @returns A promise that resolves to an object indicating success or failure.
+   */
+  cancelLlmRequest: (requestId) => ipcRenderer.invoke('llm:cancel-request', requestId),
 });

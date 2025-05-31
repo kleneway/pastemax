@@ -1,0 +1,355 @@
+.system-prompt-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.system-prompt-modal {
+  background-color: var(--color-background-modal, #2d3748);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  width: 800px;
+  max-width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.2s ease-out;
+  overflow: hidden;
+  color: var(--color-text-primary, #e2e8f0);
+}
+
+.system-prompt-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--color-bg-secondary, #f8fafc);
+}
+
+.system-prompt-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-primary, #e2e8f0);
+  font-weight: 600;
+}
+
+.system-prompt-modal-close-button {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #a0aec0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.system-prompt-modal-close-button:hover,
+.system-prompt-modal-close-button:focus {
+  background-color: var(--color-bg-hover, #edf2f7);
+  color: var(--color-text, #1a202c);
+  outline: none;
+}
+
+.system-prompt-modal-content {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.system-prompt-description {
+  margin: 0 0 16px;
+  color: var(--color-text-muted, #4a5568);
+  line-height: 1.5;
+}
+
+.system-prompt-selector-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 10px;
+}
+
+.system-prompt-selector-container label {
+  margin-bottom: 0;
+  color: var(--color-text-secondary, #a0aec0);
+}
+
+.system-prompt-select {
+  flex-grow: 1;
+  padding: 8px 12px;
+  border-radius: var(--input-border-radius, 4px);
+  border: 1px solid var(--color-border-input, #4a5568);
+  background-color: var(--color-background-input, #1a202c);
+  color: var(--color-text-input, #e2e8f0);
+  font-size: 0.9rem;
+}
+
+.system-prompt-select:focus {
+  border-color: var(--color-accent, #4299e1);
+  box-shadow: 0 0 0 2px var(--color-accent-soft, rgba(66, 153, 225, 0.5));
+  outline: none;
+}
+
+.system-prompt-button {
+  padding: 8px 15px;
+  border-radius: var(--button-border-radius, 4px);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.add-new-button {
+  background-color: var(--color-button-primary-bg, #3182ce);
+  color: var(--color-button-primary-text, #ffffff);
+  border-color: var(--color-button-primary-bg, #3182ce);
+}
+
+.add-new-button:hover {
+  background-color: var(--color-button-primary-hover-bg, #2b6cb0);
+  border-color: var(--color-button-primary-hover-bg, #2b6cb0);
+}
+
+.edit-name-button {
+  background-color: transparent;
+  color: var(--color-accent, #4299e1);
+  border: 1px solid var(--color-accent, #4299e1);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  margin-left: 10px;
+}
+
+.edit-name-button:hover {
+  background-color: var(--color-accent-soft-hover, rgba(66, 153, 225, 0.1));
+  color: var(--color-accent-hover, #2c5282);
+}
+
+.form-group.name-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-name-display {
+  padding: 5px;
+  border: 1px solid transparent;
+  cursor: default;
+}
+
+.prompt-name-display:not(.default-name) {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--color-text-secondary, #a0aec0);
+}
+
+.prompt-name-display:not(.default-name):hover {
+  background-color: var(--color-background-hover, rgba(74, 85, 104, 0.2));
+}
+
+.system-prompt-textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-input, #4a5568);
+  background-color: var(--color-background-input, #1a202c);
+  color: var(--color-text-input, #e2e8f0);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: 14px;
+  resize: vertical;
+  line-height: 1.6;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.system-prompt-textarea:hover {
+  border-color: var(--color-border-hover, #cbd5e0);
+}
+
+.system-prompt-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent, #4299e1);
+  box-shadow: 0 0 0 2px var(--color-accent-soft, rgba(66, 153, 225, 0.5));
+}
+
+.system-prompt-info {
+  display: flex;
+  justify-content: flex-end;
+  color: var(--color-text-muted, #718096);
+  font-size: 12px;
+}
+
+.system-prompt-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--color-bg-secondary, #f8fafc);
+}
+
+.system-prompt-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.system-prompt-cancel-button {
+  padding: 8px 16px;
+  background-color: var(--color-bg-secondary, #f8fafc);
+  color: var(--color-text, #1a202c);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.system-prompt-save-button {
+  padding: 8px 16px;
+  background-color: var(--color-accent, #3182ce);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.system-prompt-reset-button {
+  padding: 8px 16px;
+  background-color: var(--color-bg-secondary, #f8fafc);
+  color: var(--color-danger, #e53e3e);
+  border: 1px solid var(--color-danger-muted, #fc8181);
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.system-prompt-cancel-button:hover {
+  background-color: var(--color-bg-hover, #edf2f7);
+}
+
+.system-prompt-save-button:hover:not(:disabled) {
+  background-color: var(--color-accent-hover, #2b6cb0);
+}
+
+.system-prompt-save-button:disabled,
+.system-prompt-cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.system-prompt-reset-button:hover {
+  background-color: var(--color-danger-bg, #fff5f5);
+}
+
+.error-message {
+  color: var(--color-error, #e53e3e);
+  font-size: 0.875rem;
+  margin-top: 10px;
+}
+
+/* Dark mode styles */
+.dark-mode .system-prompt-modal {
+  background-color: var(--color-bg-dark, #1a202c);
+  border: 1px solid var(--color-border-dark, #2d3748);
+}
+
+.dark-mode .system-prompt-modal-header {
+  background-color: var(--color-bg-secondary-dark, #2d3748);
+  border-bottom: 1px solid var(--color-border-dark, #4a5568);
+}
+
+.dark-mode .system-prompt-modal-header h3 {
+  color: var(--color-text-dark, #f7fafc);
+}
+
+.dark-mode .system-prompt-modal-content {
+  color: var(--color-text-dark, #f7fafc);
+}
+
+.dark-mode .system-prompt-modal-footer {
+  background-color: var(--color-bg-secondary-dark, #2d3748);
+  border-top: 1px solid var(--color-border-dark, #4a5568);
+}
+
+.dark-mode .system-prompt-cancel-button {
+  background-color: var(--color-bg-secondary-dark, #2d3748);
+  color: var(--color-text-dark, #f7fafc);
+  border: 1px solid var(--color-border-dark, #4a5568);
+}
+
+.dark-mode .system-prompt-cancel-button:hover {
+  background-color: var(--color-bg-hover-dark, #4a5568);
+}
+
+.dark-mode .system-prompt-reset-button {
+  background-color: var(--color-bg-secondary-dark, #2d3748);
+  border: 1px solid var(--color-danger-muted-dark, #fc8181);
+}
+
+.dark-mode .system-prompt-reset-button:hover {
+  background-color: var(--color-danger-bg-dark, #3b1a1a);
+}
+
+.dark-mode .system-prompt-textarea {
+  background-color: var(--color-bg-dark, #1a202c);
+  border-color: var(--color-border-dark, #4a5568);
+  color: var(--color-text-dark, #f7fafc);
+}
+
+.dark-mode .system-prompt-textarea:focus {
+  border-color: var(--color-accent, #3182ce);
+}
+
+.dark-mode .system-prompt-description {
+  color: var(--color-text-muted-dark, #a0aec0);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
