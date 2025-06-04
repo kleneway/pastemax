@@ -40,7 +40,7 @@ const Sidebar = ({
   // State for managing the file tree and UI
   const [fileTree, setFileTree] = useState<TreeNode[]>([]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(200);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
   // Sidebar width constraints for a good UX
@@ -153,30 +153,43 @@ const Sidebar = ({
         }
       });
 
-      // Second pass: build parent-child relationships
+      // Second pass: build parent-child relationships (fixed to handle files and directories)
       const rootNodes: TreeNode[] = [];
-      treeMap.forEach((node, nodeId) => {
-        if (node.type === 'directory') {
-          const parentPath = node.path.split('/').slice(0, -1).join('/');
-          const parentId = `node-${parentPath}`;
-          const parent = treeMap.get(parentId);
-
-          if (parent && parent.type === 'directory' && parent.children) {
-            parent.children.push(node);
-          } else if (node.level === 0) {
+      treeMap.forEach((node) => {
+        if (node.level === 0) {
+          rootNodes.push(node);
+        } else {
+          // Find parent directory by removing last segment from node.path
+          const pathParts = node.path.split('/');
+          if (pathParts.length > 1) {
+            const parentPath = pathParts.slice(0, -1).join('/');
+            const parentId = `node-${parentPath}`;
+            const parent = treeMap.get(parentId);
+            if (parent && parent.type === 'directory') {
+              if (!parent.children) parent.children = [];
+              parent.children.push(node);
+            } else {
+              // If parent not found, treat as root (should not happen)
+              rootNodes.push(node);
+            }
+          } else {
+            // No parent path, treat as root
             rootNodes.push(node);
           }
-        } else if (node.level === 0) {
-          rootNodes.push(node);
         }
       });
 
-      // Sort nodes and apply expanded state
+      // Sort nodes
       const sortedTree = rootNodes.sort(sortTreeNodes).map(node => ({
         ...node,
-        isExpanded: expandedNodes[node.id] ?? true,
         children: node.children?.sort(sortTreeNodes)
       }));
+
+      // Recursively set hasBinaries for all nodes
+      computeHasBinaries(sortedTree);
+
+      // Recursively apply expanded state
+      applyExpandedRecursively(sortedTree, expandedNodes);
 
       setFileTree(sortedTree);
       prevFilesRef.current = allFiles;
@@ -188,6 +201,31 @@ const Sidebar = ({
       setIsTreeBuildingComplete(true);
     }
   }, [allFiles, selectedFolder, expandedNodes]);
+
+  // Helper: Recursively set hasBinaries for all nodes
+  function computeHasBinaries(nodes: TreeNode[]): boolean {
+    let foundBinary = false;
+    for (const node of nodes) {
+      if (node.type === "file") {
+        node.hasBinaries = !!node.fileData?.isBinary;
+        if (node.hasBinaries) foundBinary = true;
+      } else if (node.type === "directory" && node.children) {
+        node.hasBinaries = computeHasBinaries(node.children);
+        if (node.hasBinaries) foundBinary = true;
+      }
+    }
+    return foundBinary;
+  }
+
+  // Helper: Recursively apply expanded state
+  function applyExpandedRecursively(nodes: TreeNode[], expandedNodes: Record<string, boolean>) {
+    for (const node of nodes) {
+      node.isExpanded = expandedNodes[node.id] ?? true;
+      if (node.type === "directory" && node.children) {
+        applyExpandedRecursively(node.children, expandedNodes);
+      }
+    }
+  }
 
   // Optimized tree building effect
   useEffect(() => {
@@ -209,25 +247,34 @@ const Sidebar = ({
     if (!term) return nodes;
 
     const lowerTerm = term.toLowerCase();
-    const searchTerms = new Set(lowerTerm.split(/\s+/).filter(Boolean));
-    const termLength = Math.min(...Array.from(searchTerms).map(t => t.length));
+    const searchTokens = lowerTerm.split(/\s+/).filter(Boolean);
 
-    const nodeMatches = (node: TreeNode): boolean => {
+    const nodeSelfMatches = (node: TreeNode): boolean => {
       const nodeName = node.name.toLowerCase();
-      if (nodeName.length < termLength) return false;
-      return Array.from(searchTerms).every(term => nodeName.includes(term));
+      return searchTokens.every(token => nodeName.includes(token));
     };
 
-    return nodes.filter(nodeMatches).map(node => {
-      if (node.type === 'directory' && node.children) {
-        return {
-          ...node,
-          children: filterTree(node.children, term),
-          isExpanded: true
-        };
-      }
-      return node;
-    });
+    const filterRecursive = (nodes: TreeNode[]): TreeNode[] => {
+      return nodes
+        .map(node => {
+          if (node.type === "directory" && node.children) {
+            const filteredChildren = filterRecursive(node.children);
+            if (nodeSelfMatches(node) || filteredChildren.length > 0) {
+              return {
+                ...node,
+                children: filteredChildren,
+                isExpanded: true
+              };
+            }
+            return null;
+          } else {
+            return nodeSelfMatches(node) ? node : null;
+          }
+        })
+        .filter(Boolean) as TreeNode[];
+    };
+
+    return filterRecursive(nodes);
   }, []);
 
   // Memoize the filtered tree to avoid unnecessary recalculations
@@ -251,7 +298,8 @@ const Sidebar = ({
     level,
     children: type === 'directory' ? [] : undefined,
     fileData,
-    isExpanded: true
+    isExpanded: true,
+    hasBinaries: false
   });
 
   const sortTreeNodes = (a: TreeNode, b: TreeNode): number => {
