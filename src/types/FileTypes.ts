@@ -12,6 +12,8 @@ export interface FileData {
   error?: string;
   fileType?: string;
   excludedByDefault?: boolean;
+  isTokenEstimate?: boolean; // Flag to indicate if tokenCount is an estimate or real
+  isDirectory?: boolean; // Flag to indicate if this is a directory
 }
 
 export interface TreeNode {
@@ -46,12 +48,14 @@ export interface SidebarProps {
   currentWorkspaceName?: string | null;
   collapseAllFolders: () => void;
   expandAllFolders: () => void;
+  processingFiles?: Set<string>;
 }
 
 export interface FileListProps {
   files: FileData[];
   selectedFiles: string[];
   toggleFileSelection: (filePath: string) => void;
+  sortOrder?: string;
 }
 
 export interface FileCardProps {
@@ -67,6 +71,7 @@ export interface TreeItemProps {
   toggleFolderSelection: (folderPath: string, isSelected: boolean) => void;
   toggleExpanded: (nodeId: string) => void;
   includeBinaryPaths: boolean;
+  processingFiles?: Set<string>;
 }
 
 export interface SortOption {

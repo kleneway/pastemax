@@ -3,7 +3,7 @@
  */
 
 import { FileData } from '../types/FileTypes';
-import { generateAsciiFileTree, normalizePath } from './pathUtils';
+import { generateAsciiFileTree, normalizePath, arePathsEqual } from './pathUtils';
 import { getLanguageFromFilename } from './languageUtils';
 
 /**
@@ -41,8 +41,11 @@ export const formatBaseFileContent = ({
   selectedFolder,
 }: Omit<FormatContentParams, 'userInstructions'>): string => {
   // Sort files according to current sort settings
+  // Create a Set of normalized paths for O(1) lookup performance
+  const normalizedSelectedPaths = new Set(selectedFiles.map(path => normalizePath(path)));
+  
   const sortedSelected = files
-    .filter((file: FileData) => selectedFiles.includes(file.path))
+    .filter((file: FileData) => normalizedSelectedPaths.has(normalizePath(file.path)))
     .sort((a: FileData, b: FileData) => {
       let comparison = 0;
       const [sortKey, sortDir] = sortOrder.split('-');
@@ -117,8 +120,11 @@ export const formatContentForCopying = ({
   userInstructions,
 }: FormatContentParams): string => {
   // Sort files according to current sort settings
+  // Create a Set of normalized paths for O(1) lookup performance
+  const normalizedSelectedPaths = new Set(selectedFiles.map(path => normalizePath(path)));
+  
   const sortedSelected = files
-    .filter((file: FileData) => selectedFiles.includes(file.path))
+    .filter((file: FileData) => normalizedSelectedPaths.has(normalizePath(file.path)))
     .sort((a: FileData, b: FileData) => {
       let comparison = 0;
       const [sortKey, sortDir] = sortOrder.split('-');

@@ -110,6 +110,17 @@
   padding: 0 var(--space-xs); /* Add horizontal padding */
 }
 
+.estimate-badge {
+  background: var(--color-primary);
+  color: var(--background-primary);
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 8px;
+  margin-left: 4px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
 .file-card-actions {
   position: absolute;
   top: 8px;

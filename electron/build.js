@@ -9,7 +9,7 @@ async function main() {
     console.log('✅ React build completed successfully!');
 
     // Fix the paths in index.html for Electron compatibility
-    const indexHtmlPath = path.join(__dirname, 'dist', 'index.html');
+    const indexHtmlPath = path.join(__dirname, '..', 'dist', 'index.html');
     if (fs.existsSync(indexHtmlPath)) {
       let content = fs.readFileSync(indexHtmlPath, 'utf8');
 

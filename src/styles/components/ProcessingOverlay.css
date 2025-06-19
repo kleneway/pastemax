@@ -1,0 +1,72 @@
+.processing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.processing-overlay-content {
+  background-color: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  width: 90%;
+}
+
+.processing-overlay-spinner {
+  color: var(--color-primary);
+  margin-bottom: 20px;
+  animation: spin 1s linear infinite;
+}
+
+.processing-overlay-content h2 {
+  margin: 0 0 10px 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.processing-overlay-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.processing-progress {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: var(--background-secondary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Dark mode adjustments */
+.dark-mode .processing-overlay {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.dark-mode .processing-overlay-content {
+  background-color: var(--background-primary);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}

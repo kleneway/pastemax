@@ -6,17 +6,36 @@ import FilePreviewModal from './FilePreviewModal';
 import { arePathsEqual } from '../utils/pathUtils';
 
 // Add proper memoization to avoid unnecessary re-renders
-const FileList = ({ files, selectedFiles, toggleFileSelection }: FileListProps) => {
+const FileList = ({ files, selectedFiles, toggleFileSelection, sortOrder = 'tokens-desc' }: FileListProps) => {
   // Only show files that are in the selectedFiles array and not binary/skipped
   const displayableFiles = useMemo(
-    () =>
-      files.filter(
+    () => {
+      const filtered = files.filter(
         (file: FileData) =>
           selectedFiles.some((selectedPath) => arePathsEqual(selectedPath, file.path)) &&
           !file.isSkipped &&
           !file.excludedByDefault
-      ),
-    [files, selectedFiles]
+      );
+      
+      // Apply sorting to selected files
+      const [sortKey, sortDir] = sortOrder.split('-');
+      const sorted = [...filtered].sort((a, b) => {
+        let comparison = 0;
+        
+        if (sortKey === 'name') {
+          comparison = a.name.localeCompare(b.name);
+        } else if (sortKey === 'tokens') {
+          comparison = a.tokenCount - b.tokenCount;
+        } else if (sortKey === 'size') {
+          comparison = a.size - b.size;
+        }
+        
+        return sortDir === 'asc' ? comparison : -comparison;
+      });
+      
+      return sorted;
+    },
+    [files, selectedFiles, sortOrder]
   );
 
   const [previewModalOpen, setPreviewModalOpen] = useState(false);

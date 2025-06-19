@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useCallback, memo } from 'react';
-import { TreeItemProps, TreeNode } from '../types/FileTypes';
-import { ChevronRight, File, Folder } from 'lucide-react';
+import { TreeItemProps, TreeNode, FileData } from '../types/FileTypes';
+import { ChevronRight, File, Folder, Loader } from 'lucide-react';
 import { arePathsEqual } from '../utils/pathUtils';
 
 /**
@@ -30,9 +30,54 @@ const TreeItem = ({
   toggleFolderSelection,
   toggleExpanded,
   includeBinaryPaths,
+  processingFiles,
 }: TreeItemProps) => {
   const { id, name, path, type, level, isExpanded, fileData } = node;
   const checkboxRef = useRef<HTMLInputElement | null>(null);
+
+  // Calculate total tokens for a folder by summing all child files
+  const calculateFolderTokens = useCallback((folderNode: TreeNode): number => {
+    if (!folderNode.children) return 0;
+    
+    let totalTokens = 0;
+    
+    const traverseChildren = (children: TreeNode[]) => {
+      children.forEach(child => {
+        if (child.type === 'file' && child.fileData && child.fileData.tokenCount > 0) {
+          totalTokens += child.fileData.tokenCount;
+        } else if (child.type === 'directory' && child.children) {
+          traverseChildren(child.children);
+        }
+      });
+    };
+    
+    traverseChildren(folderNode.children);
+    return totalTokens;
+  }, []);
+
+  // Calculate folder tokens with estimate information
+  const calculateFolderTokensWithEstimates = useCallback((folderNode: TreeNode): { totalTokens: number; hasEstimates: boolean } => {
+    if (!folderNode.children) return { totalTokens: 0, hasEstimates: false };
+    
+    let totalTokens = 0;
+    let hasEstimates = false;
+    
+    const traverseChildren = (children: TreeNode[]) => {
+      children.forEach(child => {
+        if (child.type === 'file' && child.fileData && child.fileData.tokenCount > 0) {
+          totalTokens += child.fileData.tokenCount;
+          if (child.fileData.isTokenEstimate) {
+            hasEstimates = true;
+          }
+        } else if (child.type === 'directory' && child.children) {
+          traverseChildren(child.children);
+        }
+      });
+    };
+    
+    traverseChildren(folderNode.children);
+    return { totalTokens, hasEstimates };
+  }, []);
 
   // Check if this file is in the selected files list - memoize this calculation
   const isSelected = useMemo(
@@ -172,22 +217,27 @@ const TreeItem = ({
     return fileData ? isFileExcluded(fileData, includeBinaryPaths) : false;
   }, [fileData, includeBinaryPaths]);
 
+  // Check if this file is currently being processed for tokens
+  const isProcessing = useMemo(() => {
+    return processingFiles ? processingFiles.has(path) : false;
+  }, [processingFiles, path]);
+
   // Event Handlers - memoize them to prevent recreating on each render
   const handleToggle = useCallback(
     (e: any) => {
       e.stopPropagation();
+      e.preventDefault();
       toggleExpanded(id);
     },
     [toggleExpanded, id]
   );
 
   const handleItemClick = useCallback(() => {
-    if (type === 'directory') {
-      toggleExpanded(id);
-    } else if (type === 'file' && !isCheckboxDisabled) {
+    // Only handle file clicks, directories should only be expanded via the arrow
+    if (type === 'file' && !isCheckboxDisabled) {
       toggleFileSelection(path);
     }
-  }, [type, id, path, toggleExpanded, toggleFileSelection, isCheckboxDisabled]);
+  }, [type, path, toggleFileSelection, isCheckboxDisabled]);
 
   const handleCheckboxChange = useCallback(
     (e: any) => {
@@ -201,18 +251,9 @@ const TreeItem = ({
 
       const isChecked = e.target.checked;
 
-      console.log('Checkbox clicked:', {
-        type,
-        path,
-        isChecked,
-        isDirectory: type === 'directory',
-        isFile: type === 'file',
-      });
-
       if (type === 'file') {
         toggleFileSelection(path);
       } else if (type === 'directory') {
-        console.log('Calling toggleFolderSelection with:', path, isChecked);
         toggleFolderSelection(path, isChecked);
       }
     },
@@ -258,10 +299,34 @@ const TreeItem = ({
 
         <div className="tree-item-name">{name}</div>
 
-        {/* Show token count for files that have it */}
-        {fileData && fileData.tokenCount > 0 && (
-          <span className="tree-item-tokens">(~{fileData.tokenCount.toLocaleString()})</span>
+        {/* Show loading indicator for files being processed */}
+        {isProcessing && type === 'file' && (
+          <span className="tree-item-processing" title="Processing tokens...">
+            <Loader size={14} className="tree-item-spinner" />
+          </span>
         )}
+
+        {/* Show token count for files that have it */}
+        {!isProcessing && fileData && fileData.tokenCount > 0 && (
+          <span className="tree-item-tokens">
+            ({fileData.isTokenEstimate ? '~' : ''}{fileData.tokenCount.toLocaleString()}
+            {fileData.isTokenEstimate && <span className="estimate-badge-small" title="Estimated tokens">est</span>})
+          </span>
+        )}
+        
+        {/* Show folder token totals */}
+        {type === 'directory' && node.children && (() => {
+          const { totalTokens, hasEstimates } = calculateFolderTokensWithEstimates(node);
+          if (totalTokens > 0) {
+            return (
+              <span className="tree-item-tokens">
+                ({hasEstimates ? '~' : ''}{totalTokens.toLocaleString()}
+                {hasEstimates && <span className="estimate-badge-small" title="Estimated tokens">est</span>} tokens)
+              </span>
+            );
+          }
+          return null;
+        })()}
 
         {/* Show badges for files and folders */}
         {type === 'file' && fileData && (

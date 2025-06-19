@@ -36,6 +36,7 @@ const Sidebar = ({
   onManageCustomTypes,
   collapseAllFolders,
   expandAllFolders,
+  processingFiles,
 }: Omit<SidebarProps, 'openFolder'>) => {
   // State for managing the file tree and UI
   const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
@@ -153,6 +154,10 @@ const Sidebar = ({
                   children: {},
                 };
               }
+              // Safety check - ensure children exists
+              if (!current[part].children) {
+                current[part].children = {};
+              }
               current = current[part].children;
             }
           }
@@ -176,8 +181,7 @@ const Sidebar = ({
               return item as TreeNode;
             } else {
               const children = convertToTreeNodes(item.children, level + 1);
-              const isExpanded =
-                expandedNodes[item.id] !== undefined ? expandedNodes[item.id] : true;
+              const isExpanded = !!expandedNodes[item.id];
 
               // Check if this directory contains any binary files
               const hasBinaries = hasBinaryFiles(children);
@@ -239,7 +243,7 @@ const Sidebar = ({
     const applyExpandedState = (nodes: TreeNode[]): TreeNode[] => {
       return nodes.map((node: TreeNode): TreeNode => {
         if (node.type === 'directory') {
-          const isExpanded = expandedNodes[node.id] !== undefined ? expandedNodes[node.id] : true; // Default to expanded if not in state
+          const isExpanded = !!expandedNodes[node.id];
 
           return {
             ...node,
@@ -331,9 +335,10 @@ const Sidebar = ({
         toggleFolderSelection={toggleFolderSelection}
         toggleExpanded={toggleExpanded}
         includeBinaryPaths={includeBinaryPaths}
+        processingFiles={processingFiles}
       />
     ));
-  }, [visibleTree, selectedFiles, toggleFileSelection, toggleFolderSelection, toggleExpanded]);
+  }, [visibleTree, selectedFiles, toggleFileSelection, toggleFolderSelection, toggleExpanded, processingFiles]);
 
   return (
     <div className="sidebar" style={{ width: `${sidebarWidth}px` }}>

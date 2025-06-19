@@ -1,3 +1,54 @@
+## [1.2.0] - 2025-01-10
+
+### Added
+
+- **Lazy Loading Architecture for Improved Performance:**
+  - Implemented lightweight metadata-only initial file scanning that defers expensive file I/O and tokenization
+  - Added token estimation function that calculates approximate token counts based on file extension and size without reading file content
+  - Files now display estimated token counts with a visual indicator (~tokens and "est" badge) until actual tokenization occurs
+  - Individual files are processed for real tokens only when selected, dramatically improving initial load times
+
+- **Visual Processing Indicators:**
+  - Added loading spinner next to individual files being processed for token counting
+  - Implemented full-page processing overlay for batch operations (reserved for future use)
+  - Clear visual distinction between estimated and actual token counts in both TreeItem and FileCard components
+
+### Improved
+
+- **Large Repository Handling:**
+  - All folders now use lightweight scanning by default, making the app responsive even with massive codebases
+  - Large folder warning now triggers instantly based on file count estimates rather than after full processing
+  - Token threshold warning uses more realistic estimates (~2000 tokens per file instead of 100)
+  - Removed automatic batch processing from folder selection to maintain instant UI response
+
+- **Performance Optimizations:**
+  - Optimized file path comparison using Set-based lookups (O(1)) instead of array iterations (O(n²))
+  - Deferred content reading and tokenization until files are actually needed
+  - Significantly reduced memory usage by not loading file contents until selected
+
+### Fixed
+
+- **UI Responsiveness:**
+  - Fixed issue where selecting folders would freeze the UI while processing all files
+  - Fixed double-click requirement for first-time folder expansion in tree view
+  - Token counts now properly update when files are selected and processed
+
+## [1.1.2] - 2025-06-18
+
+### Added
+
+- **Large Folder Warning System:**
+  - Added a warning modal that appears when selecting folders with more than 500,000 tokens, alerting users about potential performance impacts.
+  - Users can choose to proceed with full selection, load files but keep them deselected, or cancel the folder load operation.
+  - Prevents application freezing when loading extremely large repositories.
+
+### Improved
+
+- **Default Folder Tree State:**
+  - Folder tree now defaults to collapsed state instead of expanded, improving initial load experience for large projects.
+  - Only the root folder is expanded by default when a new folder is selected.
+  - This change significantly improves the user experience when working with projects containing many nested folders.
+
 ## [1.1.1] - 2025-05-23
 
 ### Added

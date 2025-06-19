@@ -9,6 +9,7 @@ import IgnoreListModal from './components/IgnoreListModal';
 import ThemeToggle from './components/ThemeToggle';
 import UpdateModal from './components/UpdateModal';
 import { useIgnorePatterns } from './hooks/useIgnorePatterns';
+import { useWorkspaces } from './hooks/useWorkspaces';
 import UserInstructions from './components/UserInstructions';
 import { STORAGE_KEY_TASK_TYPE } from './types/TaskTypes';
 import {
@@ -28,6 +29,9 @@ import CopyHistoryModal, { CopyHistoryItem } from './components/CopyHistoryModal
 import CopyHistoryButton from './components/CopyHistoryButton';
 import ModelDropdown from './components/ModelDropdown';
 import ToggleSwitch from './components/base/ToggleSwitch';
+import LargeFolderModal from './components/LargeFolderModal';
+import LargeSubfolderModal from './components/LargeSubfolderModal';
+import ProcessingOverlay from './components/ProcessingOverlay';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -91,45 +95,7 @@ const App = (): JSX.Element => {
   const [allFiles, setAllFiles] = useState([] as FileData[]);
 
   /* ============================== STATE: Workspace Management ============================== */
-  const [isWorkspaceManagerOpen, setIsWorkspaceManagerOpen] = useState(false);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => {
-    return localStorage.getItem(STORAGE_KEYS.CURRENT_WORKSPACE) || null;
-  });
-  // State for confirm folder modal
-  const [isConfirmUseFolderModalOpen, setIsConfirmUseFolderModalOpen] = useState(false);
-  const [confirmFolderModalDetails, setConfirmFolderModalDetails] = useState<{
-    workspaceId: string | null;
-    workspaceName: string;
-    folderPath: string;
-  }>({ workspaceId: null, workspaceName: '', folderPath: '' });
-
-  const [workspaces, setWorkspaces] = useState(() => {
-    const savedWorkspaces = localStorage.getItem(STORAGE_KEYS.WORKSPACES);
-    if (savedWorkspaces) {
-      try {
-        const parsed = JSON.parse(savedWorkspaces);
-        if (Array.isArray(parsed)) {
-          console.log(`Initialized workspaces state with ${parsed.length} workspaces`);
-          return parsed as Workspace[];
-        } else {
-          console.warn(
-            'Invalid workspaces data in localStorage (not an array), resetting to empty array'
-          );
-          localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify([]));
-          return [] as Workspace[];
-        }
-      } catch (error) {
-        console.error('Failed to parse workspaces from localStorage during initialization:', error);
-        // Reset localStorage to prevent further errors
-        localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify([]));
-        return [] as Workspace[];
-      }
-    }
-    // Initialize with empty array and ensure localStorage has a valid value
-    console.log('No workspaces found in localStorage, initializing with empty array');
-    localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify([]));
-    return [] as Workspace[];
-  });
+  // Workspace management is now handled by the useWorkspaces hook
 
   /* ============================== STATE: Ignore Patterns ============================== */
   const {
@@ -148,6 +114,17 @@ const App = (): JSX.Element => {
   const [selectedFiles, setSelectedFiles] = useState(
     (savedFiles ? JSON.parse(savedFiles).map(normalizePath) : []) as string[]
   );
+
+  // Debug logging for selectedFiles changes
+  useEffect(() => {
+    console.log(`[DEBUG] selectedFiles changed: ${selectedFiles.length} files selected`);
+    if (selectedFiles.length > 0 && selectedFiles.length < 10) {
+      console.log(`[DEBUG] Selected files:`, selectedFiles);
+    } else if (selectedFiles.length >= 10) {
+      console.log(`[DEBUG] Too many files to log individually (${selectedFiles.length})`);
+    }
+  }, [selectedFiles]);
+
   const [sortOrder, setSortOrder] = useState(savedSortOrder || 'tokens-desc');
   const [searchTerm, setSearchTerm] = useState(savedSearchTerm || '');
   const [expandedNodes, setExpandedNodes] = useState({} as Record<string, boolean>);
@@ -160,6 +137,10 @@ const App = (): JSX.Element => {
   const [includeBinaryPaths, setIncludeBinaryPaths] = useState(
     localStorage.getItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS) === 'true'
   );
+  const [processingFiles, setProcessingFiles] = useState(new Set<string>());
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [isFolderProcessing, setIsFolderProcessing] = useState(false);
+  const [processingFolderName, setProcessingFolderName] = useState('');
 
   /* ============================== STATE: UI Controls ============================== */
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -194,6 +175,15 @@ const App = (): JSX.Element => {
     return [] as CopyHistoryItem[];
   });
   const [isCopyHistoryModalOpen, setIsCopyHistoryModalOpen] = useState(false);
+
+  /* ============================== STATE: Large Folder Modal ============================== */
+  const [isLargeFolderModalOpen, setIsLargeFolderModalOpen] = useState(false);
+  const [largeFolderDetails, setLargeFolderDetails] = useState({ totalTokens: 0, folderPath: '' });
+  
+  /* ============================== STATE: Large Subfolder Modal ============================== */
+  const [isLargeSubfolderModalOpen, setIsLargeSubfolderModalOpen] = useState(false);
+  const [largeSubfolderDetails, setLargeSubfolderDetails] = useState({ totalTokens: 0, folderPath: '', hasEstimates: false });
+  const [pendingFolderSelection, setPendingFolderSelection] = useState<{ folderPath: string; isSelected: boolean } | null>(null);
 
   const [selectedModelId, setSelectedModelId] = useState(() => {
     const savedModelId = localStorage.getItem('pastemax-selected-model');
@@ -481,23 +471,15 @@ const App = (): JSX.Element => {
       // Clear selections if folder changed
       if (!arePathsEqual(normalizedFolderPath, selectedFolder)) {
         setSelectedFiles([]);
+        // Reset expanded nodes to only show the root folder expanded
+        const newExpandedState = { [`node-${normalizedFolderPath}`]: true };
+        setExpandedNodes(newExpandedState);
+        localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedState));
       }
 
-      // Update current workspace's folder path if a workspace is active
-      if (currentWorkspaceId) {
-        setWorkspaces((prevWorkspaces: Workspace[]) => {
-          const updatedWorkspaces = prevWorkspaces.map((workspace: Workspace) =>
-            workspace.id === currentWorkspaceId
-              ? { ...workspace, folderPath: normalizedFolderPath, lastUsed: Date.now() }
-              : workspace
-          );
-          // Save to localStorage
-          localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify(updatedWorkspaces));
-          return updatedWorkspaces;
-        });
-      }
+      // Workspace update is handled by the useWorkspaces hook
     },
-    [selectedFolder, allFiles, processingStatus, currentWorkspaceId]
+    [selectedFolder, allFiles, processingStatus]
   );
 
   // The handleFileListData function is implemented as stableHandleFileListData below
@@ -522,7 +504,22 @@ const App = (): JSX.Element => {
   );
 
   const stableHandleFileListData = useCallback(
-    (files: FileData[]) => {
+    (payload: { files: FileData[], selectAll: boolean }) => {
+      const { files, selectAll } = payload;
+      
+      console.log(`[handleFileListData] Called with ${files.length} files, selectAll: ${selectAll}`);
+      
+      // Debug: Check token counts in loaded files
+      const filesWithTokens = files.filter(f => f.tokenCount > 0);
+      console.log(`[TOKEN DEBUG] Loaded ${filesWithTokens.length} files with tokens out of ${files.length}`);
+      if (filesWithTokens.length > 0) {
+        console.log(`[TOKEN DEBUG] Sample files:`, filesWithTokens.slice(0, 3).map(f => ({
+          name: f.name,
+          tokens: f.tokenCount,
+          isEstimate: f.isTokenEstimate
+        })));
+      }
+      
       setAllFiles((prevFiles: FileData[]) => {
         if (files.length !== prevFiles.length) {
           console.debug(
@@ -540,22 +537,34 @@ const App = (): JSX.Element => {
         message: `Loaded ${files.length} files`,
       });
 
-      setSelectedFiles((prevSelected: string[]) => {
-        // If we have previous selections, preserve all existing selections
+      // Force clear selections if selectAll is false - do this immediately and separately
+      if (!selectAll) {
+        console.log('[handleFileListData] selectAll is false, FORCE clearing all selections');
+        setSelectedFiles([]);
+        return; // Exit early to prevent any other selection logic
+      }
+
+      setSelectedFiles((prevSelected: string[]) => {        
+        // If we have previous selections, preserve all existing selections that still exist
         if (prevSelected.length > 0) {
           // Only filter out files that no longer exist in the new list
-          return prevSelected.filter((selectedPath: string) =>
+          const preservedSelections = prevSelected.filter((selectedPath: string) =>
             files.some((file) => arePathsEqual(file.path, selectedPath))
           );
+          console.log(`[handleFileListData] Preserving ${preservedSelections.length} existing selections`);
+          return preservedSelections;
         }
 
-        // No previous selections - select all eligible files
-        return files
+        // No previous selections - select all eligible files if selectAll is true
+        console.log(`[handleFileListData] selectAll is true, auto-selecting eligible files`);
+        const eligibleFiles = files
           .filter(
             (file: FileData) =>
               !file.isSkipped && !file.excludedByDefault && (includeBinaryPaths || !file.isBinary)
           )
           .map((file: FileData) => file.path);
+        console.log(`[handleFileListData] Auto-selecting ${eligibleFiles.length} files`);
+        return eligibleFiles;
       });
     },
     [includeBinaryPaths]
@@ -595,9 +604,17 @@ const App = (): JSX.Element => {
       stableHandleFolderSelectedRef.current(folderPath);
     };
 
-    const handleFileListDataIPC = (files: FileData[]) => {
-      console.log('[IPC] Received file-list-data:', files.length, 'files');
-      stableHandleFileListDataRef.current(files);
+    const handleFileListDataIPC = (payload: FileData[] | { files: FileData[], selectAll: boolean }) => {
+      // Handle both old and new payload formats
+      if (Array.isArray(payload)) {
+        // Old format - backward compatibility
+        console.log('[IPC] Received file-list-data (legacy format):', payload.length, 'files');
+        stableHandleFileListDataRef.current({ files: payload, selectAll: true });
+      } else {
+        // New format
+        console.log('[IPC] Received file-list-data:', payload.files.length, 'files, selectAll:', payload.selectAll);
+        stableHandleFileListDataRef.current(payload);
+      }
     };
 
     type ProcessingStatusIPCHandler = (payload: FileProcessingStatusIPCPayload) => void;
@@ -644,6 +661,22 @@ const App = (): JSX.Element => {
         handleProcessingStatusIPC
       );
       window.electron.ipcRenderer.removeListener('ignore-mode-updated', handleBackendModeUpdateIPC);
+    };
+  }, [isElectron]);
+
+  // Listen for large folder warning from main process
+  useEffect(() => {
+    if (!isElectron) return;
+    const handleLargeFolderWarning = (details: { totalTokens: number; folderPath: string }) => {
+      console.log(`[APP] Received large-folder-warning:`, details);
+      setLargeFolderDetails(details);
+      setIsLargeFolderModalOpen(true);
+      setProcessingStatus({ status: 'idle', message: '' }); // Stop the "loading" indicator
+      console.log(`[APP] Modal should now be open: isLargeFolderModalOpen set to true`);
+    };
+    window.electron.ipcRenderer.on('large-folder-warning', handleLargeFolderWarning);
+    return () => {
+      window.electron.ipcRenderer.removeListener('large-folder-warning', handleLargeFolderWarning);
     };
   }, [isElectron]);
 
@@ -701,6 +734,56 @@ const App = (): JSX.Element => {
     } else {
       console.warn('Folder selection not available in browser');
     }
+  };
+
+  // Initialize workspace management hook
+  const {
+    workspaces,
+    setWorkspaces,
+    currentWorkspaceId,
+    setCurrentWorkspaceId,
+    isWorkspaceManagerOpen,
+    setIsWorkspaceManagerOpen,
+    isConfirmUseFolderModalOpen,
+    setIsConfirmUseFolderModalOpen,
+    confirmFolderModalDetails,
+    setConfirmFolderModalDetails,
+    currentWorkspaceName,
+    handleOpenWorkspaceManager,
+    handleSelectWorkspace,
+    handleCreateWorkspace,
+    handleDeleteWorkspace,
+    handleUpdateWorkspaceFolder,
+    handleConfirmUseCurrentFolder,
+    handleDeclineUseCurrentFolder,
+  } = useWorkspaces({
+    selectedFolder,
+    setSelectedFolder,
+    setSelectedFiles,
+    setAllFiles,
+    setProcessingStatus,
+    openFolder,
+    handleFolderSelected,
+    isElectron,
+  });
+
+  // Large folder modal handlers
+  const handleProceedWithLargeFolder = () => {
+    window.electron.ipcRenderer.send('proceed-with-large-folder', largeFolderDetails.folderPath);
+    setIsLargeFolderModalOpen(false);
+    setProcessingStatus({ status: 'processing', message: 'Loading large folder...' });
+  };
+
+  const handleLoadLargeFolderDeselected = () => {
+    window.electron.ipcRenderer.send('load-large-folder-deselected', largeFolderDetails.folderPath);
+    setIsLargeFolderModalOpen(false);
+    setProcessingStatus({ status: 'processing', message: 'Loading folder with files deselected...' });
+  };
+
+  const handleCancelLargeFolder = () => {
+    window.electron.ipcRenderer.send('cancel-large-folder-load');
+    clearSavedState();
+    setIsLargeFolderModalOpen(false);
   };
 
   // Apply filters and sorting to files
@@ -808,8 +891,54 @@ const App = (): JSX.Element => {
     };
   }, [isElectron, handleFileAdded, handleFileUpdated, handleFileRemoved]);
 
+  // Process files for real tokenization when selected
+  const processFileForRealTokens = async (filePath: string) => {
+    if (!isElectron) return;
+    
+    // Add file to processing set
+    setProcessingFiles(prev => new Set([...prev, filePath]));
+    
+    try {
+      console.log(`[APP] Processing file for real tokens: ${filePath}`);
+      const result = await window.electron.ipcRenderer.invoke('process-selected-files', [filePath]);
+      
+      if (result.success && result.processedFiles.length > 0) {
+        const processedFile = result.processedFiles[0];
+        
+        // Update the file in allFiles with real token data
+        setAllFiles((prevFiles: FileData[]) => 
+          prevFiles.map((file: FileData) => {
+            if (arePathsEqual(file.path, filePath)) {
+              console.log(`[TOKEN UPDATE] Updating ${file.name}: ${file.tokenCount} -> ${processedFile.tokenCount}`);
+              return { 
+                ...file, 
+                content: processedFile.content,
+                tokenCount: processedFile.tokenCount,
+                isTokenEstimate: false,
+                isBinary: processedFile.isBinary,
+                error: processedFile.error
+              };
+            }
+            return file;
+          })
+        );
+        
+        console.log(`[APP] Updated file ${filePath} with real tokens: ${processedFile.tokenCount}`);
+      }
+    } catch (error) {
+      console.error(`[APP] Error processing file ${filePath}:`, error);
+    } finally {
+      // Remove file from processing set
+      setProcessingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(filePath);
+        return newSet;
+      });
+    }
+  };
+
   // Toggle file selection
-  const toggleFileSelection = (filePath: string) => {
+  const toggleFileSelection = async (filePath: string) => {
     // Normalize the incoming file path
     const normalizedPath = normalizePath(filePath);
 
@@ -827,19 +956,29 @@ const App = (): JSX.Element => {
         return prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
       } else {
         // Add the file to selected files
-        return [...prev, normalizedPath];
+        const newSelection = [...prev, normalizedPath];
+        
+        // If this file has estimated tokens, process it for real tokenization
+        if (f && f.isTokenEstimate && !f.isDirectory) {
+          console.log(`[toggleFileSelection] File ${normalizedPath} has estimated tokens, processing for real tokens`);
+          processFileForRealTokens(normalizedPath);
+        } else if (f) {
+          console.log(`[toggleFileSelection] File ${normalizedPath} - isTokenEstimate: ${f.isTokenEstimate}, isDirectory: ${f.isDirectory}`);
+        }
+        
+        return newSelection;
       }
     });
   };
 
-  // Toggle folder selection (select/deselect all files in folder)
-  const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
-    // Normalize the folder path for cross-platform compatibility
+  // Calculate folder tokens and detect if they're estimated
+  const calculateFolderTokensWithEstimateInfo = (folderPath: string): { totalTokens: number; hasEstimates: boolean } => {
     const normalizedFolderPath = normalizePath(folderPath);
+    let totalTokens = 0;
+    let hasEstimates = false;
 
     // Function to check if a file is in the given folder or its subfolders
     const isFileInFolder = (filePath: string, folderPath: string): boolean => {
-      // Ensure paths are normalized with consistent slashes
       let normalizedFilePath = normalizePath(filePath);
       let normalizedFolderPath = normalizePath(folderPath);
 
@@ -852,59 +991,198 @@ const App = (): JSX.Element => {
         normalizedFolderPath = '/' + normalizedFolderPath;
       }
 
-      // A file is in the folder if:
-      // 1. The paths are equal (exact match)
-      // 2. The file path is a subpath of the folder
-      const isMatch =
-        arePathsEqual(normalizedFilePath, normalizedFolderPath) ||
-        isSubPath(normalizedFolderPath, normalizedFilePath);
+      return arePathsEqual(normalizedFilePath, normalizedFolderPath) || isSubPath(normalizedFolderPath, normalizedFilePath);
+    };
 
-      if (isMatch) {
-        // File is in folder
+    // Find all files in this folder
+    const filesInFolder = allFiles.filter((file: FileData) => {
+      const inFolder = isFileInFolder(file.path, normalizedFolderPath);
+      const selectable = !file.isSkipped && !file.excludedByDefault && (includeBinaryPaths || !file.isBinary);
+      return selectable && inFolder && !file.isDirectory;
+    });
+
+    // Calculate total tokens and check for estimates
+    filesInFolder.forEach((file: FileData) => {
+      if (file.tokenCount > 0) {
+        totalTokens += file.tokenCount;
+        if (file.isTokenEstimate) {
+          hasEstimates = true;
+        }
+      }
+    });
+
+    return { totalTokens, hasEstimates };
+  };
+
+  // Toggle folder selection (select/deselect all files in folder)
+  const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
+    // Normalize the folder path for cross-platform compatibility
+    const normalizedFolderPath = normalizePath(folderPath);
+
+    // Check for large folder selection (500k+ tokens) before proceeding
+    if (isSelected) {
+      const { totalTokens, hasEstimates } = calculateFolderTokensWithEstimateInfo(normalizedFolderPath);
+      const TOKEN_THRESHOLD = 500000; // 500k tokens
+      
+      if (totalTokens >= TOKEN_THRESHOLD) {
+        console.log(`[toggleFolderSelection] Large folder detected: ${totalTokens.toLocaleString()} tokens (estimated: ${hasEstimates})`);
+        
+        // Store the pending selection and show modal
+        setPendingFolderSelection({ folderPath: normalizedFolderPath, isSelected });
+        setLargeSubfolderDetails({ 
+          totalTokens, 
+          folderPath: normalizedFolderPath, 
+          hasEstimates 
+        });
+        setIsLargeSubfolderModalOpen(true);
+        return; // Don't proceed with selection until user confirms
+      }
+    }
+
+    // For non-large folders, proceed with normal selection
+    performFolderSelection(normalizedFolderPath, isSelected);
+  };
+
+  // Perform the actual folder selection (extracted from toggleFolderSelection)
+  const performFolderSelection = async (folderPath: string, isSelected: boolean) => {
+    const normalizedFolderPath = normalizePath(folderPath);
+    const folderName = normalizedFolderPath.split(/[/\\]/).pop() || normalizedFolderPath;
+
+    // Function to check if a file is in the given folder or its subfolders (same as in toggleFolderSelection)
+    const isFileInFolder = (filePath: string, folderPath: string): boolean => {
+      let normalizedFilePath = normalizePath(filePath);
+      let normalizedFolderPath = normalizePath(folderPath);
+
+      if (!normalizedFilePath.startsWith('/') && !normalizedFilePath.match(/^[a-z]:/i)) {
+        normalizedFilePath = '/' + normalizedFilePath;
       }
 
-      return isMatch;
+      if (!normalizedFolderPath.startsWith('/') && !normalizedFolderPath.match(/^[a-z]:/i)) {
+        normalizedFolderPath = '/' + normalizedFolderPath;
+      }
+
+      return arePathsEqual(normalizedFilePath, normalizedFolderPath) || isSubPath(normalizedFolderPath, normalizedFilePath);
     };
 
     // Filter all files to get only those in this folder (and subfolders) that are selectable
     const filesInFolder = allFiles.filter((file: FileData) => {
       const inFolder = isFileInFolder(file.path, normalizedFolderPath);
-      const selectable =
-        !file.isSkipped && !file.excludedByDefault && (includeBinaryPaths || !file.isBinary);
+      const selectable = !file.isSkipped && !file.excludedByDefault && (includeBinaryPaths || !file.isBinary);
       return selectable && inFolder;
     });
 
     console.log('Found', filesInFolder.length, 'selectable files in folder');
 
-    // If no selectable files were found, do nothing
     if (filesInFolder.length === 0) {
       console.warn('No selectable files found in folder, nothing to do');
       return;
     }
 
-    // Extract just the paths from the files and normalize them
     const folderFilePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
 
     if (isSelected) {
-      // Adding files - create a new Set with all existing + new files
-      setSelectedFiles((prev: string[]) => {
-        const existingSelection = new Set(prev.map(normalizePath));
-        folderFilePaths.forEach((pathToAdd: string) => existingSelection.add(pathToAdd));
-        const newSelection = Array.from(existingSelection);
-        console.log(
-          `Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`
-        );
-        return newSelection;
-      });
+      // Check if significant processing is needed (threshold: 25+ files with estimates OR 100+ total files)
+      const filesToProcess = filesInFolder.filter((file: FileData) => 
+        file.isTokenEstimate && !file.isDirectory
+      );
+      
+      const needsSignificantProcessing = filesToProcess.length >= 25 || filesInFolder.length >= 100;
+      
+      if (needsSignificantProcessing) {
+        // Show processing overlay before starting
+        setIsFolderProcessing(true);
+        setProcessingFolderName(folderName);
+        console.log(`[performFolderSelection] Starting processing for folder "${folderName}" with ${filesToProcess.length} files to process`);
+        
+        try {
+          // Process files in a single batch call if needed
+          if (filesToProcess.length > 0) {
+            console.log(`[performFolderSelection] Starting batch processing of ${filesToProcess.length} files`);
+            const filePaths = filesToProcess.map(file => file.path);
+            const result = await window.electron.ipcRenderer.invoke('process-selected-files', filePaths);
+            
+            if (result.success && result.processedFiles.length > 0) {
+              // Update all processed files in state
+              setAllFiles((prevFiles: FileData[]) => 
+                prevFiles.map((file: FileData) => {
+                  const processedFile = result.processedFiles.find((pf: FileData) => 
+                    arePathsEqual(pf.path, file.path)
+                  );
+                  
+                  if (processedFile) {
+                    console.log(`[performFolderSelection] Updated ${file.name}: ${file.tokenCount} -> ${processedFile.tokenCount}`);
+                    return { 
+                      ...file, 
+                      content: processedFile.content,
+                      tokenCount: processedFile.tokenCount,
+                      isTokenEstimate: false,
+                      isBinary: processedFile.isBinary,
+                      error: processedFile.error
+                    };
+                  }
+                  return file;
+                })
+              );
+            }
+            console.log(`[performFolderSelection] Completed batch processing of ${filesToProcess.length} files`);
+          }
+          
+          // Only update selection after processing completes
+          setSelectedFiles((prev: string[]) => {
+            const existingSelection = new Set(prev.map(normalizePath));
+            folderFilePaths.forEach((pathToAdd: string) => existingSelection.add(pathToAdd));
+            const newSelection = Array.from(existingSelection);
+            console.log(`Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`);
+            return newSelection;
+          });
+          
+        } catch (error) {
+          console.error(`[performFolderSelection] Error processing folder "${folderName}":`, error);
+        } finally {
+          setIsFolderProcessing(false);
+          setProcessingFolderName('');
+        }
+      } else {
+        // For small folders, proceed with immediate selection as before
+        setSelectedFiles((prev: string[]) => {
+          const existingSelection = new Set(prev.map(normalizePath));
+          folderFilePaths.forEach((pathToAdd: string) => existingSelection.add(pathToAdd));
+          const newSelection = Array.from(existingSelection);
+          console.log(`Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`);
+          return newSelection;
+        });
+        
+        // Process any remaining files in background
+        if (filesToProcess.length > 0) {
+          setIsBatchProcessing(true);
+          Promise.all(
+            filesToProcess.map((file: FileData) => processFileForRealTokens(file.path))
+          ).finally(() => {
+            setIsBatchProcessing(false);
+          });
+        }
+      }
     } else {
-      // Removing files - filter out any file that's in our folder
+      // For deselection, proceed immediately
       setSelectedFiles((prev: string[]) => {
-        const newSelection = prev.filter(
-          (path: string) => !isFileInFolder(path, normalizedFolderPath)
-        );
+        const newSelection = prev.filter((path: string) => !isFileInFolder(path, normalizedFolderPath));
         return newSelection;
       });
     }
+  };
+
+  // Handle large subfolder modal responses
+  const handleLargeSubfolderConfirm = () => {
+    if (pendingFolderSelection) {
+      performFolderSelection(pendingFolderSelection.folderPath, pendingFolderSelection.isSelected);
+      setPendingFolderSelection(null);
+    }
+    setIsLargeSubfolderModalOpen(false);
+  };
+
+  const handleLargeSubfolderCancel = () => {
+    setPendingFolderSelection(null);
+    setIsLargeSubfolderModalOpen(false);
   };
 
   // Handle sort change
@@ -943,6 +1221,37 @@ const App = (): JSX.Element => {
     );
   };
 
+  // Refresh only the currently selected files without reloading the entire folder
+  const refreshSelectedFiles = async () => {
+    if (!isElectron || selectedFiles.length === 0) {
+      console.log('[refreshSelectedFiles] No files selected or not in Electron environment');
+      return;
+    }
+
+    console.log(`[refreshSelectedFiles] Refreshing ${selectedFiles.length} selected files`);
+    setIsBatchProcessing(true);
+    
+    try {
+      // Process all selected files that need updating
+      const filesToRefresh = selectedFiles.filter(filePath => {
+        const file = allFiles.find(f => arePathsEqual(f.path, filePath));
+        return file && !file.isDirectory;
+      });
+      
+      if (filesToRefresh.length > 0) {
+        console.log(`[refreshSelectedFiles] Processing ${filesToRefresh.length} files`);
+        await Promise.all(
+          filesToRefresh.map(filePath => processFileForRealTokens(filePath))
+        );
+        console.log(`[refreshSelectedFiles] Completed refreshing ${filesToRefresh.length} files`);
+      }
+    } catch (error) {
+      console.error('[refreshSelectedFiles] Error refreshing files:', error);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
   // Handle select all files
   const selectAllFiles = () => {
     console.time('selectAllFiles');
@@ -962,6 +1271,26 @@ const App = (): JSX.Element => {
         });
         return newSelection;
       });
+      
+      // Process files with estimated tokens immediately for instant copy
+      const filesToProcess = displayedFiles.filter((file: FileData) => 
+        !file.isSkipped && 
+        (includeBinaryPaths || !file.isBinary) &&
+        file.isTokenEstimate && 
+        !file.isDirectory
+      );
+      
+      if (filesToProcess.length > 0) {
+        setIsBatchProcessing(true);
+        console.log(`[selectAllFiles] Processing ${filesToProcess.length} files immediately for instant copy`);
+        
+        // Process all files and wait for completion
+        Promise.all(
+          filesToProcess.map((file: FileData) => processFileForRealTokens(file.path))
+        ).finally(() => {
+          setIsBatchProcessing(false);
+        });
+      }
     } finally {
       console.timeEnd('selectAllFiles');
     }
@@ -997,7 +1326,7 @@ const App = (): JSX.Element => {
     setExpandedNodes((prev: Record<string, boolean>) => {
       const newState = {
         ...prev,
-        [nodeId]: prev[nodeId] === undefined ? false : !prev[nodeId],
+        [nodeId]: prev[nodeId] === undefined ? true : !prev[nodeId],
       };
 
       // Save to localStorage
@@ -1067,19 +1396,32 @@ const App = (): JSX.Element => {
 
       setCachedBaseContentString(baseContent);
 
-      if (isElectron && baseContent) {
-        try {
-          const result = await window.electron.ipcRenderer.invoke('get-token-count', baseContent);
-          if (result?.tokenCount !== undefined) {
-            setCachedBaseContentTokens(result.tokenCount);
-          }
-        } catch (error) {
-          console.error('Error getting base content token count:', error);
-          setCachedBaseContentTokens(0);
+      // Calculate tokens by summing individual file tokens instead of tokenizing concatenated content
+      // This works correctly with lazy loading where some files may not have content loaded yet
+      const normalizedSelectedPaths = new Set(selectedFiles.map(path => normalizePath(path)));
+      const selectedFileData = allFiles.filter(file => 
+        normalizedSelectedPaths.has(normalizePath(file.path)) && !file.isBinary
+      );
+      
+      const baseContentTokens = selectedFileData.reduce((total, file) => {
+        const tokens = file.tokenCount || 0;
+        console.log(`[TOKEN DEBUG] File: ${file.name}, tokens: ${tokens}, isEstimate: ${file.isTokenEstimate}`);
+        return total + tokens;
+      }, 0);
+      
+      console.log(`[TOKEN DEBUG] Selected ${selectedFileData.length} files, total tokens: ${baseContentTokens}`);
+      
+      // Add estimated tokens for file tree if enabled
+      let fileTreeTokens = 0;
+      if (includeFileTree && baseContent.includes('<file_map>')) {
+        // Estimate tokens for file tree (approximately 1 token per 4 characters)
+        const fileMapMatch = baseContent.match(/<file_map>([\s\S]*?)<\/file_map>/);
+        if (fileMapMatch) {
+          fileTreeTokens = Math.ceil(fileMapMatch[1].length / 4);
         }
-      } else {
-        setCachedBaseContentTokens(0);
       }
+      
+      setCachedBaseContentTokens(baseContentTokens + fileTreeTokens);
     };
 
     const debounceTimer = setTimeout(updateBaseContent, 300);
@@ -1187,262 +1529,15 @@ const App = (): JSX.Element => {
     setSelectedTaskType(taskTypeId);
   };
 
-  // Workspace functions
-  const handleOpenWorkspaceManager = () => {
-    // Force reload workspaces from localStorage before opening
-    const storedWorkspaces = localStorage.getItem(STORAGE_KEYS.WORKSPACES);
-    if (storedWorkspaces) {
-      try {
-        const parsed = JSON.parse(storedWorkspaces);
-        if (Array.isArray(parsed)) {
-          // Update state with a fresh copy from localStorage
-          setWorkspaces(parsed);
-          console.log('Workspaces refreshed from localStorage before opening manager');
-        }
-      } catch (error) {
-        console.error('Failed to parse workspaces from localStorage:', error);
-      }
-    }
+  // Workspace functions are now handled by the useWorkspaces hook
 
-    // Open the workspace manager
-    setIsWorkspaceManagerOpen(true);
-  };
-
-  const handleSelectWorkspace = (workspaceId: string) => {
-    // Find the workspace
-    const workspace = workspaces.find((w: Workspace) => w.id === workspaceId);
-    if (!workspace) return;
-
-    // Save current workspace id
-    localStorage.setItem(STORAGE_KEYS.CURRENT_WORKSPACE, workspaceId);
-    setCurrentWorkspaceId(workspaceId);
-
-    // Update last used timestamp using functional state update
-    setWorkspaces((currentWorkspaces: Workspace[]) => {
-      const updatedWorkspaces = currentWorkspaces.map((w: Workspace) =>
-        w.id === workspaceId ? { ...w, lastUsed: Date.now() } : w
-      );
-
-      // Save to localStorage
-      localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify(updatedWorkspaces));
-
-      return updatedWorkspaces;
-    });
-
-    // If the workspace has a folder associated with it
-    if (workspace.folderPath) {
-      // Only reload if it's different from the current folder
-      if (!arePathsEqual(workspace.folderPath, selectedFolder)) {
-        console.log(`Switching to workspace folder: ${workspace.folderPath}`);
-
-        // First set the selected folder
-        setSelectedFolder(workspace.folderPath);
-        localStorage.setItem(STORAGE_KEYS.SELECTED_FOLDER, workspace.folderPath);
-
-        // Request file data from the main process (if in Electron)
-        if (isElectron && !isSafeMode) {
-          setProcessingStatus({
-            status: 'processing',
-            message: 'Loading files...',
-          });
-
-          // Ensure we're sending the updated folder path to the main process
-          window.electron.ipcRenderer.send('request-file-list', {
-            folderPath: workspace.folderPath,
-            ignoreMode,
-            customIgnores,
-          });
-        }
-      }
-    } else {
-      // Clear current selection if workspace has no folder
-      setSelectedFolder(null);
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
-      setSelectedFiles([]);
-      setAllFiles([]);
-      setProcessingStatus({
-        status: 'idle',
-        message: '',
-      });
-    }
-
-    setIsWorkspaceManagerOpen(false);
-  };
-
-  const handleCreateWorkspace = (name: string) => {
-    console.log('App: Creating new workspace with name:', name);
-
-    // Create a new workspace with a unique id
-    const newWorkspace = {
-      id: `workspace-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      name,
-      folderPath: null,
-      createdAt: Date.now(),
-      lastUsed: Date.now(),
-    };
-
-    // Add to workspaces list
-    setWorkspaces((currentWorkspaces: Workspace[]) => {
-      console.log('Updating workspaces state, current count:', currentWorkspaces.length);
-      const updatedWorkspaces = [...currentWorkspaces, newWorkspace];
-      localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify(updatedWorkspaces));
-      console.log('Saved updated workspaces to localStorage, new count:', updatedWorkspaces.length);
-      return updatedWorkspaces;
-    });
-
-    // Set as current workspace
-    localStorage.setItem(STORAGE_KEYS.CURRENT_WORKSPACE, newWorkspace.id);
-    setCurrentWorkspaceId(newWorkspace.id);
-    console.log('Set current workspace ID to:', newWorkspace.id);
-
-    if (selectedFolder) {
-      // Show confirmation modal to use current folder
-      setConfirmFolderModalDetails({
-        workspaceId: newWorkspace.id,
-        workspaceName: name,
-        folderPath: selectedFolder,
-      });
-      setIsConfirmUseFolderModalOpen(true);
-    } else {
-      // No folder selected - proceed with folder selection
-      setSelectedFolder(null);
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_FILES);
-      setSelectedFiles([]);
-      setAllFiles([]);
-      setProcessingStatus({
-        status: 'idle',
-        message: '',
-      });
-      openFolder();
-    }
-
-    // Close the workspace manager
-    setIsWorkspaceManagerOpen(false);
-    console.log('Workspace creation complete, manager closed');
-  };
-
-  const handleConfirmUseCurrentFolder = () => {
-    if (!confirmFolderModalDetails.workspaceId) return;
-
-    // Update workspace with current folder path
-    handleUpdateWorkspaceFolder(
-      confirmFolderModalDetails.workspaceId,
-      confirmFolderModalDetails.folderPath
-    );
-    setIsConfirmUseFolderModalOpen(false);
-  };
-
-  const handleDeclineUseCurrentFolder = () => {
-    setIsConfirmUseFolderModalOpen(false);
-    // Clear state and open folder selector
-    setSelectedFolder(null);
-    localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
-    localStorage.removeItem(STORAGE_KEYS.SELECTED_FILES);
-    setSelectedFiles([]);
-    setAllFiles([]);
-    setProcessingStatus({
-      status: 'idle',
-      message: '',
-    });
-    openFolder();
-  };
-
-  const handleDeleteWorkspace = (workspaceId: string) => {
-    console.log('App: Deleting workspace with ID:', workspaceId);
-    // Ensure any open modal is closed first
-    setIsConfirmUseFolderModalOpen(false);
-
-    const workspaceBeingDeleted = workspaces.find((w: Workspace) => w.id === workspaceId);
-    console.log('Deleting workspace:', workspaceBeingDeleted?.name);
-
-    // Filter out the deleted workspace, using functional update to prevent stale state
-    setWorkspaces((currentWorkspaces: Workspace[]) => {
-      const filteredWorkspaces = currentWorkspaces.filter((w: Workspace) => w.id !== workspaceId);
-      console.log(
-        `Filtered workspaces: ${currentWorkspaces.length} -> ${filteredWorkspaces.length}`
-      );
-
-      // Save the updated workspaces list to localStorage
-      localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify(filteredWorkspaces));
-      console.log('Saved filtered workspaces to localStorage');
-
-      // Ensure empty array is properly saved when deleting the last workspace
-      if (filteredWorkspaces.length === 0) {
-        console.log('No workspaces left, ensuring empty array is saved');
-        localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify([]));
-      }
-
-      return filteredWorkspaces;
-    });
-
-    // (Removed workspaceManagerVersion increment)
-
-    // If deleting current workspace, clear current selection
-    if (currentWorkspaceId === workspaceId) {
-      console.log('Deleted the current workspace, clearing workspace state');
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_WORKSPACE);
-      setCurrentWorkspaceId(null);
-
-      // Also clear folder selection when current workspace is deleted
-      setSelectedFolder(null);
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
-      setSelectedFiles([]);
-      setAllFiles([]);
-      setProcessingStatus({
-        status: 'idle',
-        message: '',
-      });
-    }
-
-    console.log('Workspace deletion complete');
-
-    // Important: Keep the workspace manager open so user can create a new workspace immediately
-    // The visual update with the deleted workspace removed will happen thanks to our useEffect in WorkspaceManager
-  };
-
-  // Handler to update a workspace's folder path
-  const handleUpdateWorkspaceFolder = (workspaceId: string, folderPath: string | null) => {
-    setWorkspaces((prevWorkspaces: Workspace[]) => {
-      const updatedWorkspaces = prevWorkspaces.map((workspace: Workspace) =>
-        workspace.id === workspaceId
-          ? { ...workspace, folderPath, lastUsed: Date.now() }
-          : workspace
-      );
-      localStorage.setItem(STORAGE_KEYS.WORKSPACES, JSON.stringify(updatedWorkspaces));
-      return updatedWorkspaces;
-    });
-
-    // If updating the current workspace, also update the selected folder
-    if (currentWorkspaceId === workspaceId) {
-      if (folderPath) {
-        // Update local storage and request file list
-        localStorage.setItem(STORAGE_KEYS.SELECTED_FOLDER, folderPath);
-        handleFolderSelected(folderPath);
-      } else {
-        // Clear folder selection in localStorage and state
-        localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
-        setSelectedFolder(null);
-        setSelectedFiles([]);
-        setAllFiles([]);
-        setProcessingStatus({
-          status: 'idle',
-          message: '',
-        });
-      }
-    }
-  };
-
-  // Get current workspace name for display
-  const currentWorkspaceName = currentWorkspaceId
-    ? workspaces.find((w: Workspace) => w.id === currentWorkspaceId)?.name || 'Untitled'
-    : null;
 
   // Handle copying content to clipboard
   const handleCopy = async () => {
     if (selectedFiles.length === 0) return;
 
     try {
+      // Files should already be processed when selected, so copy should be instant
       const content = getSelectedFilesContent();
       await navigator.clipboard.writeText(content);
       setProcessingStatus({ status: 'complete', message: 'Copied to clipboard!' });
@@ -1562,12 +1657,14 @@ const App = (): JSX.Element => {
               <button
                 className="refresh-list-btn"
                 onClick={() => {
-                  if (selectedFolder) {
+                  if (selectedFiles.length > 0) {
+                    refreshSelectedFiles();
+                  } else if (selectedFolder) {
                     setReloadTrigger((prev: number) => prev + 1);
                   }
                 }}
-                disabled={processingStatus.status === 'processing' || !selectedFolder}
-                title="Refresh File List"
+                disabled={processingStatus.status === 'processing' || isBatchProcessing || !selectedFolder}
+                title={selectedFiles.length > 0 ? "Refresh Selected Files" : "Refresh File List"}
               >
                 <RefreshCw size={16} />
               </button>
@@ -1663,6 +1760,7 @@ const App = (): JSX.Element => {
               currentWorkspaceName={currentWorkspaceName}
               collapseAllFolders={collapseAllFolders}
               expandAllFolders={expandAllFolders}
+              processingFiles={processingFiles}
             />
           ) : (
             <div className="sidebar" style={{ width: '300px' }}>
@@ -1702,7 +1800,7 @@ const App = (): JSX.Element => {
               <div className="content-header-actions-group">
                 <div className="stats-info">
                   {selectedFolder
-                    ? `${displayedFiles.length} files | ~${totalFormattedContentTokens.toLocaleString()} tokens`
+                    ? `${selectedFiles.length} files | ~${totalFormattedContentTokens.toLocaleString()} tokens`
                     : '0 files | ~0 tokens'}
                 </div>
                 {selectedFolder && (
@@ -1764,9 +1862,10 @@ const App = (): JSX.Element => {
             <div className="file-list-container">
               {selectedFolder ? (
                 <FileList
-                  files={displayedFiles}
+                  files={allFiles}
                   selectedFiles={selectedFiles}
                   toggleFileSelection={toggleFileSelection}
+                  sortOrder={sortOrder}
                 />
               ) : (
                 <div className="file-list-empty">
@@ -1893,6 +1992,29 @@ const App = (): JSX.Element => {
           onDecline={handleDeclineUseCurrentFolder}
           workspaceName={confirmFolderModalDetails.workspaceName}
           folderPath={confirmFolderModalDetails.folderPath}
+        />
+        <LargeFolderModal
+          isOpen={isLargeFolderModalOpen}
+          onClose={() => setIsLargeFolderModalOpen(false)}
+          details={largeFolderDetails}
+          onProceed={handleProceedWithLargeFolder}
+          onLoadDeselected={handleLoadLargeFolderDeselected}
+          onCancel={handleCancelLargeFolder}
+        />
+        <LargeSubfolderModal
+          isOpen={isLargeSubfolderModalOpen}
+          onClose={handleLargeSubfolderCancel}
+          onConfirm={handleLargeSubfolderConfirm}
+          details={largeSubfolderDetails}
+        />
+        {/* ProcessingOverlay for folder and batch file processing */}
+        <ProcessingOverlay 
+          isVisible={isFolderProcessing || isBatchProcessing}
+          title={isFolderProcessing ? "Processing Folder" : "Processing Files"}
+          message={isFolderProcessing 
+            ? `Calculating tokens for "${processingFolderName}" folder...`
+            : "Calculating precise tokens for copying..."
+          }
         />
       </div>
     </ThemeProvider>
