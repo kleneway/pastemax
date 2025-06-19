@@ -1,6 +1,6 @@
 {
   "name": "pastemax",
-  "version": "v1.1.0-stable",
+  "version": "1.1.0-stable",
   "main": "electron/main.js",
   "scripts": {
     "dev:all": "concurrently \"npm:dev\" \"npm:dev:electron\"",
@@ -103,7 +103,6 @@
     "asarUnpack": [
       "node_modules/ignore/**",
       "node_modules/tiktoken/**",
-      "node_modules/gpt-3-encoder/**",
       "node_modules/chokidar/**"
     ],
     "asar": true,
@@ -136,7 +135,6 @@
   },
   "dependencies": {
     "chokidar": "^3.6.0",
-    "gpt-3-encoder": "^1.1.4",
     "ignore": "^7.0.3",
     "lodash": "^4.17.21",
     "lucide-react": "^0.477.0",

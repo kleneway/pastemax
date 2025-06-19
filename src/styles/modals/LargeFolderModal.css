@@ -1,0 +1,150 @@
+/* Large Folder Modal Styles */
+.large-folder-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-modal, 1000);
+  animation: fadeIn 0.2s ease-out; /* Fade in animation */
+  background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+  backdrop-filter: blur(2px); /* Slight blur effect for depth */
+  transition: opacity 0.2s ease; /* Smooth transition when closing */
+}
+
+.large-folder-modal {
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+  background-color: var(--background-secondary);
+  border-radius: var(--border-radius-lg);
+  width: 600px;
+  max-width: 90%;
+  padding: var(--space-lg) var(--space-lg);
+  border: var(--standard-border);
+  border-color: var(--warning-color);
+  color: var(--text-primary);
+}
+
+.large-folder-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.large-folder-modal .modal-header h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.large-folder-modal button.icon-button.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--animation-curve);
+  -webkit-transition: all 0.2s var(--animation-curve);
+  -moz-transition: all 0.2s var(--animation-curve);
+  -ms-transition: all 0.2s var(--animation-curve);
+  -o-transition: all 0.2s var(--animation-curve);
+}
+
+.large-folder-modal button.icon-button.close-button:hover,
+.large-folder-modal button.icon-button.close-button:focus-visible {
+  color: var(--text-primary);
+  background: none;
+  box-shadow: none;
+}
+
+.large-folder-modal .modal-content {
+  margin-bottom: var(--space-lg);
+  color: var(--text-primary);
+}
+
+.large-folder-modal .modal-content p {
+  margin-bottom: var(--space-md);
+  line-height: 1.5;
+}
+
+.large-folder-modal .modal-content strong {
+  color: var(--warning-color);
+  font-weight: var(--font-weight-bold);
+}
+
+.large-folder-modal .modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.large-folder-modal button.primary.proceed-button {
+  background-color: var(--warning-color);
+  color: var(--text-on-primary);
+  border-color: var(--warning-color);
+}
+
+.large-folder-modal button.primary.proceed-button:hover {
+  border-color: var(--warning-color);
+  opacity: 0.9;
+}
+
+.large-folder-modal button.primary.load-deselected-button {
+  background-color: var(--color-primary);
+  color: var(--text-on-primary);
+  border-color: var(--color-primary);
+}
+
+.large-folder-modal button.primary.load-deselected-button:hover {
+  border-color: var(--color-primary);
+  opacity: 0.9;
+}
+
+.large-folder-modal button.secondary.cancel-button {
+  background-color: transparent;
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.large-folder-modal button.secondary.cancel-button:hover {
+  background-color: var(--background-tertiary);
+  border-color: var(--text-primary);
+}
+
+/* Dark mode styles */
+.dark-mode .large-folder-modal {
+  background-color: var(--background-secondary);
+  border-color: var(--warning-color);
+  color: var(--text-primary);
+}
+
+.dark-mode .large-folder-modal .modal-content strong {
+  color: var(--warning-color);
+}
+
+/* Responsive styles */
+@media (max-width: 600px) {
+  .large-folder-modal {
+    width: 95%;
+    padding: var(--space-md);
+  }
+
+  .large-folder-modal .modal-actions {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .large-folder-modal .modal-actions button {
+    width: 100%;
+  }
+}

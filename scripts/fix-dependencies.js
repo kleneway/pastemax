@@ -13,7 +13,7 @@ console.log('🔧 PasteMax Dependency Fixer');
 console.log('============================');
 
 // Define the dependencies we need to ensure are installed
-const criticalDependencies = ['ignore', 'tiktoken', 'gpt-3-encoder'];
+const criticalDependencies = ['ignore', 'tiktoken'];
 
 // Get the application path (platform-dependent)
 function getAppResourcesPath() {
@@ -61,7 +61,7 @@ function fixDependencies() {
 
     // Install required dependencies
     console.log('📦 Installing dependencies locally...');
-    execSync('npm install ignore tiktoken gpt-3-encoder --no-save', {
+    execSync('npm install ignore tiktoken --no-save', {
       stdio: 'inherit',
     });
 
@@ -79,7 +79,6 @@ function fixDependencies() {
     packageJson.build.asarUnpack = [
       'node_modules/ignore/**',
       'node_modules/tiktoken/**',
-      'node_modules/gpt-3-encoder/**',
     ];
 
     // Write updated package.json

@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('electron', {
       'request-file-list',
       'debug-file-selection',
       'cancel-directory-loading',
+      'proceed-with-large-folder',
+      'load-large-folder-deselected',
+      'cancel-large-folder-load',
     ];
     if (validChannels.includes(channel)) {
       // Ensure data is serializable before sending
@@ -64,6 +67,7 @@ contextBridge.exposeInMainWorld('electron', {
       'file-added',
       'file-updated',
       'file-removed',
+      'large-folder-warning',
     ];
     if (validChannels.includes(channel)) {
       // Remove any existing listeners to avoid duplicates
@@ -101,6 +105,7 @@ contextBridge.exposeInMainWorld('electron', {
         'file-added',
         'file-updated',
         'file-removed',
+        'large-folder-warning',
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeListener(channel, (event, ...args) => func(...args));
@@ -113,7 +118,8 @@ contextBridge.exposeInMainWorld('electron', {
         'check-for-updates',
         'get-token-count',
         'fetch-models',
-      ]; // Added 'fetch-models'
+        'process-selected-files',
+      ]; // Added 'fetch-models' and 'process-selected-files'
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, data);
       }
