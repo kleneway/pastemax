@@ -54,6 +54,10 @@
   background-color: var(--background-selected);
 }
 
+.tree-item.folder-selected {
+  background-color: var(--background-tertiary);
+}
+
 .tree-item.disabled-item {
   opacity: 0.7;
   cursor: default;

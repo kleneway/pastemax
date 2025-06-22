@@ -151,6 +151,13 @@ const App = (): JSX.Element => {
   const [sortOrder, setSortOrder] = useState(savedSortOrder || 'tokens-desc');
   const [searchTerm, setSearchTerm] = useState(savedSearchTerm || '');
   const [expandedNodes, setExpandedNodes] = useState({} as Record<string, boolean>);
+  const [selectedFolderNode, setSelectedFolderNode] = useState<string | null>(null);
+  const [lastExpandCollapseWasSelected, setLastExpandCollapseWasSelected] = useState(false);
+
+  useEffect(() => {
+    setLastExpandCollapseWasSelected(false);
+  }, [selectedFolderNode]);
+
   const [displayedFiles, setDisplayedFiles] = useState([] as FileData[]);
   const [processingStatus, setProcessingStatus] = useState({ status: 'idle', message: '' } as {
     status: 'idle' | 'processing' | 'complete' | 'error';
@@ -1014,28 +1021,60 @@ const App = (): JSX.Element => {
     }
     const directoryPaths = new Set<string>();
     allFiles.forEach((file) => {
-      let currentPath = dirname(file.path);
-      while (
-        currentPath &&
-        currentPath !== selectedFolder &&
-        !arePathsEqual(currentPath, selectedFolder) &&
-        currentPath.startsWith(selectedFolder)
-      ) {
-        directoryPaths.add(normalizePath(currentPath));
-        const parentPath = dirname(currentPath);
-        if (parentPath === currentPath) break; // Avoid infinite loop for root or malformed paths
-        currentPath = parentPath;
-      }
-      // Add the root selected folder itself if it's not already (e.g. if only files are at root)
-      // This is implicitly handled by the Sidebar's root node, but good to be aware
-    });
-    // Add the selected folder itself as a potential directory node
-    directoryPaths.add(normalizePath(selectedFolder));
+      if (!file.path) return;
 
-    return Array.from(directoryPaths).map((dirPath) => `node-${dirPath}`);
+      const normalizedSelectedFolder = selectedFolder ? normalizePath(selectedFolder) : '';
+      const normalizedFilePath = normalizePath(file.path);
+
+      const relativePath = normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
+        ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1)
+        : normalizedFilePath;
+
+      const parts = relativePath.split('/');
+      let currentPath = '';
+
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!part) continue;
+
+        currentPath = currentPath ? join(currentPath, part) : part;
+        const fullPath = normalizedSelectedFolder
+          ? join(normalizedSelectedFolder, currentPath)
+          : currentPath;
+
+        directoryPaths.add(fullPath);
+      }
+    });
+
+    const nodeIds = Array.from(directoryPaths).map((dirPath) => `node-${dirPath}`);
+    return nodeIds;
   }, [allFiles, selectedFolder]);
 
+  const collapseSelectedFolder = useCallback(() => {
+    if (!selectedFolderNode) return;
+
+    const dirNodeIds = getAllDirectoryNodeIds();
+    const newExpandedNodes = { ...expandedNodes };
+
+    const selectedPath = selectedFolderNode.replace('node-', '');
+    dirNodeIds.forEach((nodeId) => {
+      const nodePath = nodeId.replace('node-', '');
+      if (nodePath.startsWith(selectedPath + '/') || nodeId === selectedFolderNode) {
+        newExpandedNodes[nodeId] = false;
+      }
+    });
+
+    setExpandedNodes(newExpandedNodes);
+    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
+  }, [selectedFolderNode, getAllDirectoryNodeIds, expandedNodes, setExpandedNodes]);
+
   const collapseAllFolders = useCallback(() => {
+    if (selectedFolderNode && !lastExpandCollapseWasSelected) {
+      collapseSelectedFolder();
+      setLastExpandCollapseWasSelected(true);
+      return;
+    }
+
     const dirNodeIds = getAllDirectoryNodeIds();
     const newExpandedNodes: Record<string, boolean> = {};
     dirNodeIds.forEach((id) => {
@@ -1043,15 +1082,43 @@ const App = (): JSX.Element => {
     });
     setExpandedNodes(newExpandedNodes);
     localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
-  }, [getAllDirectoryNodeIds, setExpandedNodes]);
+    setLastExpandCollapseWasSelected(false);
+  }, [selectedFolderNode, lastExpandCollapseWasSelected, collapseSelectedFolder, getAllDirectoryNodeIds, setExpandedNodes]);
+
+  const expandSelectedFolder = useCallback(() => {
+    if (!selectedFolderNode) return;
+
+    const dirNodeIds = getAllDirectoryNodeIds();
+    const newExpandedNodes = { ...expandedNodes };
+
+    const selectedPath = selectedFolderNode.replace('node-', '');
+    dirNodeIds.forEach((nodeId) => {
+      const nodePath = nodeId.replace('node-', '');
+      if (nodePath.startsWith(selectedPath + '/') || nodeId === selectedFolderNode) {
+        newExpandedNodes[nodeId] = true;
+      }
+    });
+
+    setExpandedNodes(newExpandedNodes);
+    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
+  }, [selectedFolderNode, getAllDirectoryNodeIds, expandedNodes, setExpandedNodes]);
+
+
 
   const expandAllFolders = useCallback(() => {
+    if (selectedFolderNode && !lastExpandCollapseWasSelected) {
+      expandSelectedFolder();
+      setLastExpandCollapseWasSelected(true);
+      return;
+    }
+
     // Setting to empty object means all nodes will default to expanded
     // as per the logic in Sidebar.tsx: expandedNodes[node.id] !== undefined ? expandedNodes[node.id] : true;
     const newExpandedNodes = {};
     setExpandedNodes(newExpandedNodes);
     localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
-  }, [setExpandedNodes]);
+    setLastExpandCollapseWasSelected(false);
+  }, [selectedFolderNode, lastExpandCollapseWasSelected, expandSelectedFolder, setExpandedNodes]);
 
   // Cache base content when file selections or formatting options change
   useEffect(() => {
@@ -1663,6 +1730,8 @@ const App = (): JSX.Element => {
               currentWorkspaceName={currentWorkspaceName}
               collapseAllFolders={collapseAllFolders}
               expandAllFolders={expandAllFolders}
+              selectedFolderNode={selectedFolderNode}
+              setSelectedFolderNode={setSelectedFolderNode}
             />
           ) : (
             <div className="sidebar" style={{ width: '300px' }}>
