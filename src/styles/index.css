@@ -491,6 +491,17 @@ body {
     color 0.3s ease;
 }
 
+/* Active state for toggle buttons */
+.sidebar-action-btn.active {
+  background-color: var(--primary-button-background);
+  color: var(--primary-button-text);
+}
+
+.sidebar-action-btn.active:hover {
+  background-color: var(--primary-button-hover);
+  color: var(--primary-button-text);
+}
+
 /* Make modal transitions smoother */
 .ignore-patterns-modal-overlay {
   transition: opacity 0.2s ease;
@@ -501,6 +512,23 @@ body {
   border-bottom: var(--standard-border);
   background-color: var(--background-secondary);
   padding: 8px 16px;
+  animation: slideDown 0.2s ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideDown {
+  from {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    max-height: 300px;
+    opacity: 1;
+    padding-top: 8px;
+    padding-bottom: 16px;
+  }
 }
 
 .changes-header {
@@ -521,6 +549,7 @@ body {
 .changes-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .changes-list {

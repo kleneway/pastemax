@@ -44,6 +44,7 @@ const Sidebar = ({
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const [isChangesPanelOpen, setIsChangesPanelOpen] = useState(false);
 
   // Sidebar width constraints for a good UX
   const MIN_SIDEBAR_WIDTH = 200;
@@ -380,10 +381,10 @@ const Sidebar = ({
           <ListX size={18} />
         </button>
         <button
-          className="sidebar-action-btn"
-          title="Add Git changed files to selection"
-          onClick={selectChangedFiles}
-          aria-label="Add changed files"
+          className={`sidebar-action-btn ${isChangesPanelOpen ? 'active' : ''}`}
+          title="Toggle Git changes panel"
+          onClick={() => setIsChangesPanelOpen(prev => !prev)}
+          aria-label="Toggle Git changes panel"
           type="button"
         >
           <GitCommit size={18} />
@@ -408,15 +409,17 @@ const Sidebar = ({
         </button>
       </div>
 
-      {/* Git Changes panel */}
-      <ChangedFilesPanel
-        selectedFolder={selectedFolder}
-        allFiles={allFiles}
-        selectedFiles={selectedFiles}
-        includeBinaryPaths={includeBinaryPaths}
-        onAddAll={selectChangedFiles}
-        onAddSingle={(p) => toggleFileSelection(p)}
-      />
+      {/* Git Changes panel - conditionally rendered */}
+      {isChangesPanelOpen && (
+        <ChangedFilesPanel
+          selectedFolder={selectedFolder}
+          allFiles={allFiles}
+          selectedFiles={selectedFiles}
+          includeBinaryPaths={includeBinaryPaths}
+          onAddAll={selectChangedFiles}
+          onAddSingle={(p) => toggleFileSelection(p)}
+        />
+      )}
 
       {allFiles.length > 0 ? (
         isTreeBuildingComplete ? (
