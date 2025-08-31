@@ -3,7 +3,8 @@ import { SidebarProps, TreeNode } from '../types/FileTypes';
 import SearchBar from './SearchBar';
 import TreeItem from './TreeItem';
 import TaskTypeSelector from './TaskTypeSelector';
-import { ListChecks, ListX, FolderMinus, FolderPlus } from 'lucide-react';
+import { ListChecks, ListX, FolderMinus, FolderPlus, GitCommit } from 'lucide-react';
+import ChangedFilesPanel from './ChangedFilesPanel';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -28,6 +29,7 @@ const Sidebar = ({
   onSearchChange,
   selectAllFiles,
   deselectAllFiles,
+  selectChangedFiles,
   expandedNodes,
   toggleExpanded,
   includeBinaryPaths,
@@ -379,6 +381,15 @@ const Sidebar = ({
         </button>
         <button
           className="sidebar-action-btn"
+          title="Add Git changed files to selection"
+          onClick={selectChangedFiles}
+          aria-label="Add changed files"
+          type="button"
+        >
+          <GitCommit size={18} />
+        </button>
+        <button
+          className="sidebar-action-btn"
           title="Collapse all folders"
           onClick={collapseAllFolders}
           aria-label="Collapse all folders"
@@ -396,6 +407,16 @@ const Sidebar = ({
           <FolderPlus size={18} />
         </button>
       </div>
+
+      {/* Git Changes panel */}
+      <ChangedFilesPanel
+        selectedFolder={selectedFolder}
+        allFiles={allFiles}
+        selectedFiles={selectedFiles}
+        includeBinaryPaths={includeBinaryPaths}
+        onAddAll={selectChangedFiles}
+        onAddSingle={(p) => toggleFileSelection(p)}
+      />
 
       {allFiles.length > 0 ? (
         isTreeBuildingComplete ? (

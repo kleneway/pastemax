@@ -496,6 +496,87 @@ body {
   transition: opacity 0.2s ease;
 }
 
+/* -------------------- Git Changes Panel -------------------- */
+.changes-panel {
+  border-bottom: var(--standard-border);
+  background-color: var(--background-secondary);
+  padding: 8px 16px;
+}
+
+.changes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.changes-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.changes-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.changes-list {
+  max-height: 160px;
+  overflow: auto;
+  background-color: var(--background-primary);
+  border: var(--standard-border);
+  border-radius: 6px;
+}
+
+.changes-list ul {
+  list-style: none;
+}
+
+.change-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+.change-item:last-child {
+  border-bottom: none;
+}
+
+.change-path {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+
+.change-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.change-added {
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+.change-disabled {
+  color: var(--text-disabled);
+}
+
+.changes-empty, .changes-error {
+  padding: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 /* ==========================================================================
    Responsive Adjustments
    ========================================================================== */

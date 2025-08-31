@@ -199,6 +199,78 @@ ipcMain.on('open-folder', async (event, arg) => {
   }
 });
 
+// Fetch list of files changed but not yet committed (modified, staged, untracked, renames)
+// Returns absolute normalized paths limited to the provided folder
+ipcMain.handle('get-changed-files', async (_event, { folderPath } = {}) => {
+  const run = (cmd) =>
+    new Promise((resolve) => {
+      exec(cmd, { timeout: 10000 }, (err, stdout, stderr) => {
+        if (err) return resolve({ error: stderr || err.message });
+        resolve({ stdout });
+      });
+    });
+
+  if (!folderPath) {
+    return { error: 'No folder selected' };
+  }
+
+  try {
+    // Ensure we are inside a git repo and find repo root
+    const rootRes = await run(`git -C "${folderPath}" rev-parse --show-toplevel`);
+    if (rootRes.error) return { error: 'Not a git repository or git not available' };
+    const repoRoot = normalizePath(rootRes.stdout.trim());
+
+    // Use porcelain -z to robustly capture all change types, including renames
+    const statusRes = await run(`git -C "${repoRoot}" status --porcelain=v1 -z -uall`);
+    if (statusRes.error) return { error: statusRes.error };
+
+    const entries = (statusRes.stdout || '').split('\0').filter(Boolean);
+    const relPaths = new Set();
+
+    for (let i = 0; i < entries.length; i++) {
+      const rec = entries[i];
+      if (!rec || rec.length < 3) continue; // XY + space + path
+      const xy = rec.slice(0, 2);
+      const rest = rec.slice(3);
+      const x = xy[0];
+      const y = xy[1];
+
+      // Skip deleted paths (not present on disk to include in context)
+      if (x === 'D' || y === 'D') continue;
+
+      // Handle renames/copies: next entry is the new path
+      if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
+        const newPath = entries[i + 1];
+        if (newPath) {
+          relPaths.add(newPath);
+          i += 1;
+        } else {
+          relPaths.add(rest);
+        }
+        continue;
+      }
+
+      // Everything else (including '??' untracked)
+      relPaths.add(rest);
+    }
+
+    // Limit to the requested folder (which might be a subfolder of the repo)
+    const path = require('path');
+    const selectedFolderAbs = normalizePath(path.resolve(folderPath));
+
+    const absPaths = Array.from(relPaths)
+      .map((p) => normalizePath(path.join(repoRoot, p)))
+      .filter((abs) => {
+        const inside = ensureAbsolutePath(abs).startsWith(ensureAbsolutePath(selectedFolderAbs));
+        return inside;
+      });
+
+    return { files: absPaths };
+  } catch (e) {
+    return { error: e?.message || 'Failed to get changed files' };
+  }
+});
+
 if (!ipcMain.eventNames().includes('get-ignore-patterns')) {
   ipcMain.handle(
     'get-ignore-patterns',
