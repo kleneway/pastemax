@@ -30,6 +30,8 @@ const TreeItem = ({
   toggleFolderSelection,
   toggleExpanded,
   includeBinaryPaths,
+  selectedFolderNode,
+  setSelectedFolderNode,
 }: TreeItemProps) => {
   const { id, name, path, type, level, isExpanded, fileData } = node;
   const checkboxRef = useRef<HTMLInputElement | null>(null);
@@ -183,11 +185,13 @@ const TreeItem = ({
 
   const handleItemClick = useCallback(() => {
     if (type === 'directory') {
-      toggleExpanded(id);
+      if (setSelectedFolderNode) {
+        setSelectedFolderNode(selectedFolderNode === id ? null : id);
+      }
     } else if (type === 'file' && !isCheckboxDisabled) {
       toggleFileSelection(path);
     }
-  }, [type, id, path, toggleExpanded, toggleFileSelection, isCheckboxDisabled]);
+  }, [type, id, path, selectedFolderNode, setSelectedFolderNode, toggleFileSelection, isCheckboxDisabled]);
 
   const handleCheckboxChange = useCallback(
     (e: any) => {
@@ -219,9 +223,11 @@ const TreeItem = ({
     [type, path, toggleFileSelection, toggleFolderSelection, isCheckboxDisabled]
   );
 
+  const isFolderSelected = type === 'directory' && selectedFolderNode === id;
+
   return (
     <div
-      className={`tree-item ${isSelected ? 'selected' : ''} ${isCheckboxDisabled ? 'disabled-item' : ''}`}
+      className={`tree-item ${isSelected ? 'selected' : ''} ${isFolderSelected ? 'folder-selected' : ''} ${isCheckboxDisabled ? 'disabled-item' : ''}`}
       style={{ marginLeft: `${level * 16}px` }}
       onClick={handleItemClick}
     >

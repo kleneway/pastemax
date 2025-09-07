@@ -3,7 +3,9 @@ import { SidebarProps, TreeNode } from '../types/FileTypes';
 import SearchBar from './SearchBar';
 import TreeItem from './TreeItem';
 import TaskTypeSelector from './TaskTypeSelector';
-import { ListChecks, ListX, FolderMinus, FolderPlus } from 'lucide-react';
+import { ListChecks, ListX } from 'lucide-react';
+import ExpandAllIcon from './base/ExpandAllIcon';
+import CollapseAllIcon from './base/CollapseAllIcon';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -36,6 +38,8 @@ const Sidebar = ({
   onManageCustomTypes,
   collapseAllFolders,
   expandAllFolders,
+  selectedFolderNode,
+  setSelectedFolderNode,
 }: Omit<SidebarProps, 'openFolder'>) => {
   // State for managing the file tree and UI
   const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
@@ -331,9 +335,11 @@ const Sidebar = ({
         toggleFolderSelection={toggleFolderSelection}
         toggleExpanded={toggleExpanded}
         includeBinaryPaths={includeBinaryPaths}
+        selectedFolderNode={selectedFolderNode}
+        setSelectedFolderNode={setSelectedFolderNode}
       />
     ));
-  }, [visibleTree, selectedFiles, toggleFileSelection, toggleFolderSelection, toggleExpanded]);
+  }, [visibleTree, selectedFiles, toggleFileSelection, toggleFolderSelection, toggleExpanded, selectedFolderNode, setSelectedFolderNode]);
 
   return (
     <div className="sidebar" style={{ width: `${sidebarWidth}px` }}>
@@ -379,21 +385,35 @@ const Sidebar = ({
         </button>
         <button
           className="sidebar-action-btn"
-          title="Collapse all folders"
-          onClick={collapseAllFolders}
-          aria-label="Collapse all folders"
-          type="button"
+          onClick={expandAllFolders}
+          title={
+            selectedFolderNode
+              ? "Expand selected folder (click again for all folders)"
+              : "Expand all folders"
+          }
+          aria-label={
+            selectedFolderNode
+              ? "Expand selected folder (click again for all folders)"
+              : "Expand all folders"
+          }
         >
-          <FolderMinus size={18} />
+          <ExpandAllIcon />
         </button>
         <button
           className="sidebar-action-btn"
-          title="Expand all folders"
-          onClick={expandAllFolders}
-          aria-label="Expand all folders"
-          type="button"
+          onClick={collapseAllFolders}
+          title={
+            selectedFolderNode
+              ? "Collapse selected folder (click again for all folders)"
+              : "Collapse all folders"
+          }
+          aria-label={
+            selectedFolderNode
+              ? "Collapse selected folder (click again for all folders)"
+              : "Collapse all folders"
+          }
         >
-          <FolderPlus size={18} />
+          <CollapseAllIcon />
         </button>
       </div>
 

@@ -46,6 +46,8 @@ export interface SidebarProps {
   currentWorkspaceName?: string | null;
   collapseAllFolders: () => void;
   expandAllFolders: () => void;
+  selectedFolderNode?: string | null;
+  setSelectedFolderNode?: (nodeId: string | null) => void;
 }
 
 export interface FileListProps {
@@ -67,6 +69,8 @@ export interface TreeItemProps {
   toggleFolderSelection: (folderPath: string, isSelected: boolean) => void;
   toggleExpanded: (nodeId: string) => void;
   includeBinaryPaths: boolean;
+  selectedFolderNode?: string | null;
+  setSelectedFolderNode?: (nodeId: string | null) => void;
 }
 
 export interface SortOption {
