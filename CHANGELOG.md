@@ -258,3 +258,21 @@
 
 - Improved separation of concerns in the Electron main process, leading to more maintainable and testable code.
 - Enhanced clarity of ignore handling mechanisms through explicit function naming in `ignore-manager.js`.
+
+## [Unreleased]
+
+### Added
+
+- Direct Send User Instructions to AI Chat: Added a "Send to AI" button in the User Instructions panel to allow sending the current instructions directly to the AI chat as a user message.
+
+### Changed
+
+- ...
+
+### Fixed
+
+- ...
+
+### Removed
+
+- ...

@@ -1,16 +1,26 @@
 import { useCallback, memo, useMemo } from 'react';
 import { FileData } from '../types/FileTypes';
-import { Plus, X, FileText, Eye, FileWarning } from 'lucide-react';
+import { Plus, X, FileText, Eye, FileWarning, MessageSquare } from 'lucide-react';
 import CopyButton from './CopyButton';
+import ChatButton from './ChatButton';
 
 interface FileCardComponentProps {
   file: FileData;
   isSelected: boolean;
   toggleSelection: (path: string) => void;
-  onPreview: (filePath: string) => void; // Add onPreview prop
+  onPreview: (filePath: string) => void;
+  onChatAbout?: (filePath: string) => void;
+  isLlmConfigured?: boolean;
 }
 
-const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComponentProps) => {
+const FileCard = ({
+  file,
+  isSelected,
+  toggleSelection,
+  onPreview,
+  onChatAbout,
+  isLlmConfigured = false,
+}: FileCardComponentProps) => {
   const { name, path: filePath, tokenCount, isBinary, size } = file;
 
   // Format file size for display
@@ -31,6 +41,12 @@ const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComp
   const handlePreview = useCallback(() => {
     onPreview(filePath);
   }, [onPreview, filePath]);
+
+  const handleChatAbout = useCallback(() => {
+    if (onChatAbout) {
+      onChatAbout(filePath);
+    }
+  }, [onChatAbout, filePath]);
 
   return (
     <div className={`file-card ${isSelected ? 'selected' : ''} ${isBinary ? 'binary-card' : ''}`}>
@@ -75,6 +91,19 @@ const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComp
             <CopyButton text={file.content} className="file-card-action">
               {''}
             </CopyButton>
+            {onChatAbout && !isBinary && (
+              <button
+                className="file-card-action chat-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onChatAbout) onChatAbout(filePath);
+                }}
+                title="Chat about this file"
+                disabled={!isLlmConfigured}
+              >
+                <MessageSquare size={16} />
+              </button>
+            )}
           </>
         )}
       </div>

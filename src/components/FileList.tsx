@@ -1,12 +1,18 @@
 // src/components/FileList.tsx
-import { useState, useMemo, useCallback } from 'react'; // Add useCallback
+import { useState, useMemo, useCallback } from 'react';
 import { FileListProps, FileData } from '../types/FileTypes';
 import FileCard from './FileCard';
 import FilePreviewModal from './FilePreviewModal';
 import { arePathsEqual } from '../utils/pathUtils';
 
 // Add proper memoization to avoid unnecessary re-renders
-const FileList = ({ files, selectedFiles, toggleFileSelection }: FileListProps) => {
+const FileList = ({
+  files,
+  selectedFiles,
+  toggleFileSelection,
+  onChatAbout,
+  isLlmConfigured,
+}: FileListProps) => {
   // Only show files that are in the selectedFiles array and not binary/skipped
   const displayableFiles = useMemo(
     () =>
@@ -56,9 +62,11 @@ const FileList = ({ files, selectedFiles, toggleFileSelection }: FileListProps) 
         isSelected={true} // All displayed files are selected
         toggleSelection={toggleFileSelection}
         onPreview={handlePreview} // Pass the preview handler
+        onChatAbout={onChatAbout} // Pass the chat handler
+        isLlmConfigured={isLlmConfigured} // Pass LLM configuration status
       />
     ));
-  }, [displayableFiles, toggleFileSelection, handlePreview]);
+  }, [displayableFiles, toggleFileSelection, handlePreview, onChatAbout, isLlmConfigured]);
 
   return (
     <div className="file-list-container">

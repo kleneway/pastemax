@@ -41,6 +41,11 @@ import './styles/modals/UpdateModal.css';
 import './styles/modals/CustomTaskTypeModal.css';
 import './styles/modals/WorkspaceManager.css';
 import './styles/modals/CopyHistoryModal.css';
+import './styles/modals/LlmSettingsModal.css';
+import './styles/modals/ChatView.css';
+
+/* ============================== COMPONENT STYLES ========================= */
+import './styles/contentarea/ChatButton.css';
 
 /**
  * Add an event listener to ensure state is saved properly before a page refresh.

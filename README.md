@@ -42,6 +42,11 @@ PasteMax is a simple desktop app built for developers using AI coding assistants
 - **Token Counting**: View approximate token count for each file
 - **Model Context Limit**: Select different models (Claude-3.7, GPT-4o, Gemini 2.5, etc.)
 - **Context Limit Warning**: Get alerted when selections exceed the model's context limit
+- **User Instructions Input**: Guide the AI by providing specific instructions that are appended to the copied content. You can also send these instructions directly to the AI chat as a user message using the "Send to AI" button.
+- **Customizable Task Types**: Define and manage different "Task Types" (e.g., "Explain Code", "Write Documentation", "Generate Unit Tests") with pre-set user instructions for various common AI interactions.
+- **Model Selection Dropdown**: Choose from various configured LLM models for your interactions.
+- **Integrated AI Chat**: Directly chat with configured AI models within PasteMax. The chat can be general or targeted towards specific files or the entire repository (soon).
+- **System Prompt Editor**: Customize the base system prompt used by the AI to tailor its persona and responses.
 
 ### 🔍 Content & Preview
 
