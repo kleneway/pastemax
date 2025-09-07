@@ -11,6 +11,217 @@ const { getUpdateStatus, resetUpdateSessionState } = require('./update-manager')
 // Configuration constants
 const MAX_DIRECTORY_LOAD_TIME = 300000; // 5 minutes timeout for large repositories
 
+// Token estimation based on file extension and size
+function estimateTokens(fileName, fileSize) {
+  const path = require('path');
+  const ext = path.extname(fileName).toLowerCase();
+  
+  // Binary/media files have 0 tokens
+  const binaryExtensions = [
+    // Images
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp', '.tiff', '.tif',
+    // Videos
+    '.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v',
+    // Audio
+    '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a',
+    // Archives
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz',
+    // Executables
+    '.exe', '.dll', '.so', '.dylib', '.bin', '.app', '.deb', '.rpm',
+    // Fonts
+    '.woff', '.woff2', '.ttf', '.otf', '.eot',
+    // Documents (binary format)
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    // Other binary
+    '.sqlite', '.db', '.lock'
+  ];
+  
+  if (binaryExtensions.includes(ext)) {
+    return 0;
+  }
+  
+  // Code files are denser (more tokens per character)
+  const codeExtensions = [
+    // Web technologies
+    '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.scss', '.sass', '.less',
+    '.vue', '.svelte', '.astro',
+    // Programming languages
+    '.py', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', '.php', '.rb', '.go', 
+    '.rs', '.swift', '.kt', '.scala', '.clj', '.cljs', '.r', '.m', '.mm',
+    // Shell scripts
+    '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
+    // SQL and databases
+    '.sql', '.mysql', '.postgres', '.sqlite',
+    // Other code
+    '.dart', '.lua', '.perl', '.pl', '.haskell', '.hs', '.elm', '.nim'
+  ];
+  
+  if (codeExtensions.includes(ext)) {
+    return Math.ceil(fileSize / 3); // ~3 chars per token for code
+  }
+  
+  // Text/config files
+  const textExtensions = [
+    // Documentation
+    '.txt', '.md', '.rst', '.adoc', '.tex',
+    // Config files
+    '.json', '.xml', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf', '.config',
+    // Environment and build
+    '.env', '.gitignore', '.gitattributes', '.dockerfile', '.dockerignore',
+    '.makefile', '.cmake', '.gradle', '.maven',
+    // Data files
+    '.csv', '.tsv', '.log', '.logs',
+    // License and readme files
+    'license', 'readme', 'changelog', 'contributing'
+  ];
+  
+  if (textExtensions.includes(ext) || !ext) {
+    return Math.ceil(fileSize / 4); // ~4 chars per token for text
+  }
+  
+  // Files without extensions - check filename
+  if (!ext) {
+    const lowerName = fileName.toLowerCase();
+    if (['readme', 'license', 'changelog', 'contributing', 'dockerfile', 'makefile', 'gemfile', 'procfile'].includes(lowerName)) {
+      return Math.ceil(fileSize / 4);
+    }
+  }
+  
+  // Default estimation for unknown file types
+  return Math.ceil(fileSize / 4);
+}
+
+// Enhanced lightweight directory scanning - gets metadata + token estimates
+async function scanDirectoryLightweight(folderPath, ignoreFilter) {
+  const fs = require('fs').promises;
+  const path = require('path');
+  const files = [];
+  const maxFiles = 10000; // Limit to prevent infinite loops
+  
+  async function scanDir(dir, relativeTo = folderPath) {
+    if (files.length > maxFiles) return;
+    
+    try {
+      const items = await fs.readdir(dir, { withFileTypes: true });
+      
+      for (const item of items) {
+        if (files.length > maxFiles) break;
+        
+        const fullPath = path.join(dir, item.name);
+        const relativePath = path.relative(relativeTo, fullPath).replace(/\\/g, '/');
+        
+        // Check if path should be ignored
+        if (ignoreFilter && ignoreFilter.ignores(relativePath)) {
+          continue;
+        }
+        
+        if (item.isDirectory()) {
+          // Add directory to list
+          files.push({
+            path: fullPath,
+            relativePath: relativePath,
+            name: item.name,
+            isDirectory: true,
+            size: 0,
+            estimatedTokens: 0 // Will be calculated as sum of children
+          });
+          
+          // Recurse into directory
+          await scanDir(fullPath, relativeTo);
+        } else {
+          // Add file to list with basic metadata and token estimate
+          try {
+            const stats = await fs.stat(fullPath);
+            const estimatedTokens = estimateTokens(item.name, stats.size);
+            
+            if (files.length < 5) { // Debug first few files
+              console.log(`[TOKEN ESTIMATE DEBUG] ${item.name}: size=${stats.size}, estimated=${estimatedTokens}`);
+            }
+            
+            files.push({
+              path: fullPath,
+              relativePath: relativePath,
+              name: item.name,
+              isDirectory: false,
+              size: stats.size,
+              estimatedTokens: estimatedTokens
+            });
+          } catch (error) {
+            // Skip files we can't stat
+            console.warn(`Cannot stat file ${fullPath}:`, error.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`Cannot read directory ${dir}:`, error.message);
+    }
+  }
+  
+  await scanDir(folderPath);
+  
+  // The frontend will calculate directory token totals from the file list
+  // No need to calculate them here since we're filtering out directories
+  
+  const totalEstimatedTokens = files.reduce((sum, file) => sum + (file.estimatedTokens || 0), 0);
+  console.log(`[MAIN] Lightweight scan found ${files.length} items with ~${totalEstimatedTokens} estimated tokens`);
+  return files;
+}
+
+// Helper function for recursive file counting
+async function countFilesRecursive(dir, depth, maxDepth, maxFiles, counters, fs, path) {
+  if (depth > maxDepth || counters.fileCount > maxFiles) return;
+  
+  try {
+    const items = await fs.readdir(dir, { withFileTypes: true });
+    
+    for (const item of items) {
+      if (counters.fileCount > maxFiles) break;
+      
+      // Skip common ignore patterns quickly
+      if (item.name.startsWith('.git') || 
+          item.name === 'node_modules' || 
+          item.name === 'dist' || 
+          item.name === '__pycache__' ||
+          item.name === '.venv' ||
+          item.name === 'venv') {
+        continue;
+      }
+      
+      if (item.isDirectory()) {
+        counters.dirCount++;
+        await countFilesRecursive(path.join(dir, item.name), depth + 1, maxDepth, maxFiles, counters, fs, path);
+      } else {
+        counters.fileCount++;
+      }
+    }
+  } catch (error) {
+    // Skip directories we can't read
+    console.warn(`Cannot read directory ${dir}:`, error.message);
+  }
+}
+
+// Quick folder size estimation function
+async function getEstimatedFileCount(folderPath) {
+  const fs = require('fs').promises;
+  const path = require('path');
+  
+  try {
+    const counters = { fileCount: 0, dirCount: 0 };
+    const maxDepth = 5; // Limit depth to avoid deep recursion
+    const maxFiles = 50000; // Stop counting after this many files
+    
+    await countFilesRecursive(folderPath, 0, maxDepth, maxFiles, counters, fs, path);
+    console.log(`[MAIN] Quick scan found ~${counters.fileCount} files in ${counters.dirCount} directories`);
+    return { 
+      fileCount: counters.fileCount > maxFiles ? -1 : counters.fileCount, // -1 indicates too many files to count
+      dirCount: counters.dirCount
+    };
+  } catch (error) {
+    console.error('Error estimating folder size:', error);
+    return { fileCount: 0, dirCount: 0 }; // Return 0s on error to allow normal processing
+  }
+}
+
 // ======================
 // GLOBAL STATE
 // ======================
@@ -25,6 +236,9 @@ let loadingTimeoutId = null;
  * @property {number} files - Number of files processed
  */
 let currentProgress = { directories: 0, files: 0 };
+
+// State to hold large folder data while waiting for user confirmation
+let pendingLargeFolderData = null;
 
 // ======================
 // PATH UTILITIES
@@ -313,6 +527,25 @@ ipcMain.handle('get-token-count', async (event, textToTokenize) => {
 ipcMain.on('request-file-list', async (event, payload) => {
   console.log('Received request-file-list payload:', payload); // Log the entire payload
 
+  // Validate payload structure
+  if (!payload || typeof payload !== 'object') {
+    console.error('Invalid payload received in request-file-list:', payload);
+    event.sender.send('file-processing-status', {
+      status: 'error',
+      message: 'Invalid request format. Please try again.',
+    });
+    return;
+  }
+
+  if (!payload.folderPath || typeof payload.folderPath !== 'string') {
+    console.error('Invalid or missing folderPath in payload:', payload);
+    event.sender.send('file-processing-status', {
+      status: 'error',
+      message: 'Invalid folder path. Please select a folder again.',
+    });
+    return;
+  }
+
   // Always clear file caches before scanning
   clearFileCaches();
 
@@ -366,18 +599,79 @@ ipcMain.on('request-file-list', async (event, payload) => {
     }
     console.log('Ignore patterns loaded successfully');
 
-    const { results: files } = await readFilesRecursively(
+    // Quick folder size check before full processing
+    console.log(`[MAIN] Performing quick folder size check for ${payload.folderPath}`);
+    try {
+      const { fileCount: estimatedFileCount, dirCount } = await getEstimatedFileCount(payload.folderPath);
+      console.log(`[MAIN] Estimated file count: ${estimatedFileCount}, directories: ${dirCount}`);
+      
+      // If estimated file count is high OR we found many directories (indicating complex repo structure), show modal immediately
+      const shouldShowModal = estimatedFileCount > 1000 || 
+                             estimatedFileCount === -1 || 
+                             dirCount > 200; // Many directories indicate complex structure
+      
+      if (shouldShowModal) {
+        console.log(`[MAIN] Large/complex directory detected (${estimatedFileCount} files, ${dirCount} dirs), showing modal immediately`);
+        
+        // Store minimal data for the modal
+        pendingLargeFolderData = { 
+          folderPath: payload.folderPath, 
+          files: [], // Empty for now, will be populated if user chooses to proceed
+          ignoreFilter: ignoreFilter,
+          payload: payload
+        };
+        
+        event.sender.send('large-folder-warning', { 
+          totalTokens: estimatedFileCount === -1 ? 50000000 : estimatedFileCount * 2000, // More realistic estimate: ~2000 tokens per file
+          folderPath: payload.folderPath,
+          isEstimate: true
+        });
+        
+        // Stop further execution until user responds
+        isLoadingDirectory = false;
+        stopFileProcessing();
+        if (loadingTimeoutId) {
+          clearTimeout(loadingTimeoutId);
+          loadingTimeoutId = null;
+        }
+        return; // IMPORTANT: Stop here.
+      }
+    } catch (error) {
+      console.error('Error during folder size estimation:', error);
+      // Continue with normal processing if estimation fails
+    }
+
+    // Always use lightweight scan for initial load (per TASKS_2.md)
+    console.log(`[MAIN] Performing lightweight scan for ${payload.folderPath}`);
+    const lightweightFiles = await scanDirectoryLightweight(
       payload.folderPath,
-      payload.folderPath, // rootDir is the same as the initial dir for top-level call
-      ignoreFilter,
-      BrowserWindow.fromWebContents(event.sender),
-      currentProgress,
-      payload.folderPath, // currentDir is also the same for top-level
-      payload?.ignoreMode ?? currentIgnoreMode,
-      null, // fileQueue
-      watcher.shutdownWatcher,
-      watcher.initializeWatcher
+      ignoreFilter
     );
+    
+    // Convert lightweight files to the expected format
+    const files = lightweightFiles
+      .filter(file => !file.isDirectory) // Only include actual files
+      .map((file) => ({
+        path: file.path,
+        relativePath: file.relativePath,
+        name: file.name,
+        size: file.size || 0,
+        isDirectory: false,
+        extension: path.extname(file.name).toLowerCase(),
+        excluded: isPathExcludedByDefaults(
+          file.path,
+          payload.folderPath,
+          payload.ignoreMode ?? currentIgnoreMode
+        ),
+        content: '', // Empty content for lightweight mode
+        tokenCount: file.estimatedTokens || 0,
+        isTokenEstimate: true, // Flag to indicate this is an estimate
+        isBinary: false, // Will be determined later if file is selected
+        isSkipped: false,
+        error: null,
+      }));
+    
+    console.log(`[MAIN] Lightweight scan completed: ${files.length} files found`);
 
     if (!isLoadingDirectory) {
       return;
@@ -395,6 +689,8 @@ ipcMain.on('request-file-list', async (event, payload) => {
       message: `Found ${files.length} files`,
     });
 
+    console.log(`[MAIN] Starting serialization of ${files.length} files for ${payload.folderPath}`);
+    
     const serializedFiles = files
       .filter((file) => {
         if (typeof file?.path !== 'string') {
@@ -424,26 +720,51 @@ ipcMain.on('request-file-list', async (event, payload) => {
         };
       });
 
-    event.sender.send('file-list-data', serializedFiles);
+    // Calculate total token count
+    const totalTokens = serializedFiles.reduce((sum, file) => sum + (file.tokenCount || 0), 0);
+    const TOKEN_THRESHOLD = 500000;
 
-    // After sending file-list-data, start watcher for the root folder
-    // Use the same ignoreFilter as used for the scan
-    // Pass rootDir as payload.folderPath
-    watcher.initializeWatcher(
-      payload.folderPath, // rootDir
-      BrowserWindow.fromWebContents(event.sender),
-      ignoreFilter,
-      // For defaultIgnoreFilterInstance, use the system default filter
-      require('./ignore-manager.js').systemDefaultFilter,
-      // processSingleFileCallback
-      (filePath) =>
-        require('./file-processor.js').processSingleFile(
-          filePath,
-          payload.folderPath,
-          ignoreFilter,
-          payload?.ignoreMode ?? currentIgnoreMode
-        )
-    );
+    console.log(`[MAIN] Token count check: ${totalTokens} tokens, threshold: ${TOKEN_THRESHOLD}`);
+
+    // Check if folder exceeds token threshold
+    if (totalTokens > TOKEN_THRESHOLD) {
+      // Store the large folder data temporarily
+      pendingLargeFolderData = { 
+        folderPath: payload.folderPath, 
+        files: serializedFiles,
+        ignoreFilter: ignoreFilter,
+        payload: payload
+      };
+      
+      console.log(`[MAIN] Sending large-folder-warning for ${payload.folderPath} with ${totalTokens} tokens`);
+      // Send warning to renderer
+      event.sender.send('large-folder-warning', { totalTokens, folderPath: payload.folderPath });
+      
+      // Do NOT send file-list-data yet - wait for user's choice
+    } else {
+      console.log(`[MAIN] Sending file-list-data for ${payload.folderPath} with ${totalTokens} tokens`);
+      // Send data as an object with a 'selectAll' flag
+      event.sender.send('file-list-data', { files: serializedFiles, selectAll: true });
+
+      // After sending file-list-data, start watcher for the root folder
+      // Use the same ignoreFilter as used for the scan
+      // Pass rootDir as payload.folderPath
+      watcher.initializeWatcher(
+        payload.folderPath, // rootDir
+        BrowserWindow.fromWebContents(event.sender),
+        ignoreFilter,
+        // For defaultIgnoreFilterInstance, use the system default filter
+        require('./ignore-manager.js').systemDefaultFilter,
+        // processSingleFileCallback
+        (filePath) =>
+          require('./file-processor.js').processSingleFile(
+            filePath,
+            payload.folderPath,
+            ignoreFilter,
+            payload?.ignoreMode ?? currentIgnoreMode
+          )
+      );
+    }
   } catch (err) {
     console.error('Error processing file list:', err);
     stopFileProcessing(); // Stop file processor state
@@ -465,6 +786,296 @@ ipcMain.on('request-file-list', async (event, payload) => {
       clearTimeout(loadingTimeoutId);
       loadingTimeoutId = null;
     }
+  }
+});
+
+// Handler to proceed with full selection for large folders
+ipcMain.on('proceed-with-large-folder', async (event, folderPath) => {
+  if (!pendingLargeFolderData) {
+    console.error('No pending large folder data available');
+    event.sender.send('file-processing-status', { 
+      status: 'error', 
+      message: 'Large folder data is no longer available. Please try selecting the folder again.' 
+    });
+    return;
+  }
+  
+  if (pendingLargeFolderData.folderPath === folderPath) {
+    console.log('[MAIN] User chose to proceed with large folder, performing FULL scan with actual token counts:', folderPath);
+    
+    // User explicitly chose "Proceed Anyway" - perform full processing with actual token counts
+    isLoadingDirectory = true;
+    startFileProcessing();
+    setupDirectoryLoadingTimeout(BrowserWindow.fromWebContents(event.sender), folderPath);
+
+    event.sender.send('file-processing-status', {
+      status: 'processing',
+      message: 'Reading files and calculating exact token counts...',
+    });
+
+    try {
+      // Use full file processing to get actual token counts (not estimates)
+      const result = await readFilesRecursively(
+        pendingLargeFolderData.folderPath, // dir
+        pendingLargeFolderData.folderPath, // rootDir
+        pendingLargeFolderData.ignoreFilter, // ignoreFilter
+        BrowserWindow.fromWebContents(event.sender), // window
+        currentProgress, // progress
+        pendingLargeFolderData.folderPath, // currentDir
+        pendingLargeFolderData.payload?.ignoreMode ?? currentIgnoreMode, // ignoreMode
+        null // fileQueue
+      );
+      
+      const files = result.results;
+      
+      pendingLargeFolderData.files = files;
+      
+    } catch (error) {
+      console.error('Error during confirmed large folder scan:', error);
+      event.sender.send('file-processing-status', { 
+        status: 'error', 
+        message: `Error scanning folder: ${error.message}` 
+      });
+      
+      // Clean up loading state on error
+      isLoadingDirectory = false;
+      stopFileProcessing();
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+        loadingTimeoutId = null;
+      }
+      pendingLargeFolderData = null;
+      return;
+    } finally {
+      isLoadingDirectory = false;
+      stopFileProcessing();
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+        loadingTimeoutId = null;
+      }
+    }
+    
+    // Check if pendingLargeFolderData still exists
+    if (!pendingLargeFolderData) {
+      console.error('pendingLargeFolderData is null when trying to proceed with large folder');
+      event.sender.send('file-processing-status', { 
+        status: 'error', 
+        message: 'Large folder data is no longer available. Please try selecting the folder again.' 
+      });
+      return;
+    }
+    
+    // Send the data with selectAll: true
+    event.sender.send('file-list-data', { files: pendingLargeFolderData.files, selectAll: true });
+    
+    // Initialize watcher after sending data
+    console.log('Large folder data sent with selectAll: true');
+    
+    // Initialize watcher for the large folder
+    try {
+      // Store references before clearing pendingLargeFolderData
+      const folderPath = pendingLargeFolderData.folderPath;
+      const ignoreFilter = pendingLargeFolderData.ignoreFilter;
+      
+      await watcher.initializeWatcher(
+        folderPath, // rootDir
+        BrowserWindow.fromWebContents(event.sender),
+        ignoreFilter,
+        // For defaultIgnoreFilterInstance, use the system default filter
+        require('./ignore-manager.js').systemDefaultFilter,
+        // processSingleFileCallback
+        (filePath) =>
+          require('./file-processor.js').processSingleFile(
+            filePath,
+            folderPath, // Use stored folderPath, not pendingLargeFolderData.folderPath
+            ignoreFilter // Use stored ignoreFilter, not pendingLargeFolderData.ignoreFilter
+          )
+      );
+      console.log('[MAIN] Watcher initialized for large folder (selectAll: true)');
+    } catch (error) {
+      console.error('[MAIN] Failed to initialize watcher for large folder:', error);
+    }
+    
+    // Clear the pending data
+    pendingLargeFolderData = null;
+  }
+});
+
+// Handler to load files but keep them deselected
+ipcMain.on('load-large-folder-deselected', async (event, folderPath) => {
+  if (!pendingLargeFolderData) {
+    console.error('No pending large folder data available');
+    event.sender.send('file-processing-status', { 
+      status: 'error', 
+      message: 'Large folder data is no longer available. Please try selecting the folder again.' 
+    });
+    return;
+  }
+  
+  if (pendingLargeFolderData.folderPath === folderPath) {
+    console.log('[MAIN] User chose to load large folder with files deselected, starting lightweight scan:', folderPath);
+    
+    // Always perform lightweight scan for large folders (per TASKS_4.md)
+    isLoadingDirectory = true;
+    startFileProcessing();
+    setupDirectoryLoadingTimeout(BrowserWindow.fromWebContents(event.sender), folderPath);
+
+    event.sender.send('file-processing-status', {
+      status: 'processing',
+      message: 'Scanning file structure (lightweight mode)...',
+    });
+
+    try {
+      const lightweightFiles = await scanDirectoryLightweight(
+        pendingLargeFolderData.folderPath,
+        pendingLargeFolderData.ignoreFilter
+      );
+      
+      const files = lightweightFiles.filter(file => !file.isDirectory).map(file => ({
+        path: file.path,
+        relativePath: file.relativePath,
+        name: file.name,
+        size: file.size || 0,
+        isDirectory: false,
+        extension: path.extname(file.name).toLowerCase(),
+        excluded: isPathExcludedByDefaults(
+          file.path,
+          pendingLargeFolderData.payload.folderPath,
+          pendingLargeFolderData.payload.ignoreMode ?? currentIgnoreMode
+        ),
+        content: '', // Empty content for lightweight mode
+        tokenCount: file.estimatedTokens || 0,
+        isTokenEstimate: true, // Flag to indicate this is an estimate
+        isBinary: false, // Will be determined later if file is selected
+        isSkipped: false,
+        error: null,
+      }));
+      
+      pendingLargeFolderData.files = files;
+      
+      const fileCount = files.length;
+      const totalItems = lightweightFiles.length;
+      const dirCount = totalItems - fileCount;
+      console.log(`[MAIN] Lightweight scan completed: ${fileCount} files found (${dirCount} directories excluded from file list)`);
+      
+    } catch (error) {
+      console.error('Error during confirmed large folder scan:', error);
+      event.sender.send('file-processing-status', { 
+        status: 'error', 
+        message: `Error scanning folder: ${error.message}` 
+      });
+      
+      // Clean up loading state on error
+      isLoadingDirectory = false;
+      stopFileProcessing();
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+        loadingTimeoutId = null;
+      }
+      pendingLargeFolderData = null;
+      return;
+    } finally {
+      isLoadingDirectory = false;
+      stopFileProcessing();
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+        loadingTimeoutId = null;
+      }
+    }
+    
+    // Check if pendingLargeFolderData still exists
+    if (!pendingLargeFolderData) {
+      console.error('pendingLargeFolderData is null when trying to proceed with large folder');
+      event.sender.send('file-processing-status', { 
+        status: 'error', 
+        message: 'Large folder data is no longer available. Please try selecting the folder again.' 
+      });
+      return;
+    }
+    
+    // Send the data with selectAll: false
+    event.sender.send('file-list-data', { files: pendingLargeFolderData.files, selectAll: false });
+    
+    // Initialize watcher after sending data
+    console.log('Large folder data sent with selectAll: false');
+    
+    // Initialize watcher for the large folder
+    try {
+      // Store references before clearing pendingLargeFolderData
+      const folderPath = pendingLargeFolderData.folderPath;
+      const ignoreFilter = pendingLargeFolderData.ignoreFilter;
+      
+      await watcher.initializeWatcher(
+        folderPath, // rootDir
+        BrowserWindow.fromWebContents(event.sender),
+        ignoreFilter,
+        // For defaultIgnoreFilterInstance, use the system default filter
+        require('./ignore-manager.js').systemDefaultFilter,
+        // processSingleFileCallback
+        (filePath) =>
+          require('./file-processor.js').processSingleFile(
+            filePath,
+            folderPath, // Use stored folderPath, not pendingLargeFolderData.folderPath
+            ignoreFilter // Use stored ignoreFilter, not pendingLargeFolderData.ignoreFilter
+          )
+      );
+      console.log('[MAIN] Watcher initialized for large folder (selectAll: false)');
+    } catch (error) {
+      console.error('[MAIN] Failed to initialize watcher for large folder:', error);
+    }
+    
+    // Clear the pending data
+    pendingLargeFolderData = null;
+  }
+});
+
+// Handler to cancel the large folder load
+ipcMain.on('cancel-large-folder-load', () => {
+  // Clear the pending data
+  pendingLargeFolderData = null;
+  console.log('Large folder load cancelled by user');
+});
+
+// Handler for on-demand file processing when files are selected
+ipcMain.handle('process-selected-files', async (event, filePaths) => {
+  console.log(`[MAIN] Processing ${filePaths.length} selected files for real tokenization...`);
+  
+  const fileProcessor = require('./file-processor');
+  const processedFiles = [];
+  
+  try {
+    for (const filePath of filePaths) {
+      try {
+        // Process each file individually to get real content and tokens
+        // Create a minimal ignore filter for individual file processing
+        const { createGlobalIgnoreFilter } = require('./ignore-manager');
+        const minimalIgnoreFilter = createGlobalIgnoreFilter([]);
+        
+        const processedFile = await fileProcessor.processSingleFile(
+          filePath,
+          require('path').dirname(filePath), // Use file's directory as rootDir
+          minimalIgnoreFilter, // Use minimal ignore filter
+          'automatic' // Default ignore mode
+        );
+        
+        if (processedFile) {
+          processedFiles.push({
+            path: filePath,
+            ...processedFile,
+            isTokenEstimate: false // Mark as real tokenization
+          });
+        }
+      } catch (error) {
+        console.warn(`Error processing file ${filePath}:`, error.message);
+        // Keep the original estimated data if processing fails
+      }
+    }
+    
+    console.log(`[MAIN] Successfully processed ${processedFiles.length}/${filePaths.length} files`);
+    return { success: true, processedFiles };
+  } catch (error) {
+    console.error('Error in process-selected-files:', error);
+    return { success: false, error: error.message };
   }
 });
 
@@ -642,7 +1253,9 @@ function createWindow() {
   });
 
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+    const devURL = process.env.ELECTRON_START_URL || 'http://localhost:5173';
+    console.log('Loading development URL:', devURL);
+    mainWindow.loadURL(devURL);
     mainWindow.webContents.openDevTools();
   } else {
     const prodPath = app.isPackaged

@@ -82,53 +82,38 @@ npm install
 
 ```
 npm run build:electron
-npm run package
 ```
 
-**Note**: If you encounter issues with `npm run package`, you can try the platform-specific command:
-
+4. Package the app for your platform:
 ```
-npm run package:win
+# For macOS
 npm run package:mac
+
+# For Windows
+npm run package:win
+
+# For Linux
 npm run package:linux
 ```
 
-After successful build, you'll find the executable files inside the `release-builds` directory:
-
-**Windows:**
-
-- `PasteMax Setup 1.0.0.exe` - Installer version
-- `PasteMax 1.0.0.exe` - Portable version
-
-**Mac:**
-
-- `PasteMax 1.0.0.dmg` - Installer version
-- `PasteMax 1.0.0.zip` - Portable version
-
-**Linx:**
-
-- `PasteMax 1.0.0.deb` - Installer version (Deb package)
-- `PasteMax 1.0.0.rpm` - Installer version (RPM package)
-- `PasteMax 1.0.0.AppImage` - Portable version
+After successful packaging, you'll find the executable files inside the `release-builds` directory.
 
 ## Development
 
 ### Prerequisites
 
-- Node.js (v14 or higher)
-- npm or yarn
+- Node.js (v18 or higher)
+- npm
 
 ### Running in Development Mode
 
-To run the application in development mode:
+To run the application in development mode with hot-reloading for both the frontend and backend:
 
 ```
-# Start the Vite dev server
-npm run dev
-
-# In a separate terminal, start Electron
-npm run dev:electron
+npm run dev:all
 ```
+
+This will start the Vite dev server for the React app and the Electron main process concurrently.
 
 ### Building for Production
 
@@ -139,60 +124,51 @@ To build the application for production:
 npm run build:electron
 
 # Create platform-specific distributables
-npm run package
+npm run package:mac    # macOS
+npm run package:win    # Windows  
+npm run package:linux  # Linux
 ```
 
 ## Project Structure
 
-- `src/` - React application source code
-  - `components/` - React components
-  - `context/` - React context providers
-  - `hooks/` - Custom React hooks
+- **`src/`** - React application source code (Renderer Process)
+  - `components/` - Reusable React components
+  - `context/` - React context providers (e.g., ThemeContext)
+  - `hooks/` - Custom React hooks for stateful logic
   - `types/` - TypeScript type definitions
-  - `utils/` - Utility functions
-  - `styles/` - CSS styles
-  - `assets/` - Static assets like images
-- `electron/` - Electron-Backend related files
-  - `main.js` - Electron main process
-  - `preload.js` - Preload script for secure IPC
-  - `renderer.js` - Renderer process utilities
-  - `build.js` - Build script for production
-  - `dev.js` - Development script
-  - `excluded-files.js` - Configuration for files to exclude by default
-  - `file-processor.js` - File processing utilities
-  - `ignore-manager.js` - Ignore pattern management
-  - `update-checker.js` - Update checking functionality
-  - `update-manager.js` - Update management
-  - `utils.js` - Utility functions
-  - `watcher.js` - File change watcher
-- `public/` - Public assets (favicon, etc.)
-- `scripts/` - Utility scripts for building and testing
-- `docs/` - Documentation
+  - `utils/` - Utility functions for the frontend
+  - `styles/` - Modularized CSS stylesheets
+- **`electron/`** - Electron-Backend related files (Main Process)
+  - `main.js` - Main process entry point, window management, and IPC handling
+  - `preload.js` - Preload script for secure IPC communication
+  - `file-processor.js` - Logic for reading files, counting tokens, etc.
+  - `ignore-manager.js` - Logic for handling `.gitignore` and other ignore patterns
+  - `update-manager.js` - Logic for managing update checks
+  - `watcher.js` - File system watcher logic using Chokidar
+- **`public/`** - Static assets (e.g., icons)
+- **`scripts/`** - Utility scripts for building, testing, and debugging
 
 ## Libraries Used
 
-- Electron - Desktop application framework
-- React - UI library
-- TypeScript - Type safety
-- Vite - Build tool and development server
-- tiktoken - Token counting for LLM context estimation
-- ignore - .gitignore-style pattern matching for file exclusions
-- chokidar - File Watcher
+- **Electron** - Desktop application framework
+- **React** & **TypeScript** - For building the user interface
+- **Vite** - Build tool and development server
+- **Tiktoken** - Fast BPE tokenization for LLM context estimation
+- **ignore** - For `.gitignore`-style pattern matching
+- **Chokidar** - Advanced file system watcher
 
 ## Troubleshooting
 
 ### Getting "Warning: Not trusted" on Windows
 
-If you see a warning about the app not being trusted, you can bypass this by clicking "run anyways". This is a common issue with Electron apps, especially since PasteMax is not signed.
+If you see a warning about the app not being trusted, you can bypass this by clicking "More info" -> "Run anyway". This is a common issue with unsigned Electron apps.
 
-### Getting "App not responding" on Mac
+### Getting "App can't be opened" on Mac
 
-If you encounter an "App not responding" message on Mac, it may be due to macOS security settings. You can try the following:
-
-1. Open System Preferences.
-2. Go to Security & Privacy.
-3. Under the General tab, look for the "Allow apps downloaded from" section.
-4. Look for "PasteMax" and click "Open Anyway".
+If you encounter this message on macOS, it may be due to security settings.
+1. Right-click the `PasteMax.app` file and select "Open".
+2. You may see a warning dialog. Click "Open" again to confirm.
+You should only need to do this the first time you run the app.
 
 ### Other Issues
 
@@ -204,13 +180,7 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for details.
 
 ## Star History ⭐
 

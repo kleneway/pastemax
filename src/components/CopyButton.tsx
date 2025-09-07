@@ -2,29 +2,28 @@ import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 
 interface CopyButtonProps {
-  text: string;
+  onClick: () => Promise<void>;
+  disabled?: boolean;
   className?: string;
-  children?: JSX.Element | string;
+  children?: React.ReactNode;
 }
 
-const CopyButton = ({ text, className = '', children }: CopyButtonProps) => {
+const CopyButton = ({ onClick, disabled = false, className = '', children }: CopyButtonProps) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
+  const handleCopyClick = async () => {
+    if (disabled) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await onClick();
       setCopied(true);
-
-      // Reset the copied state after 2 seconds
       setTimeout(() => {
         setCopied(false);
       }, 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      console.error('Copy operation failed:', err);
     }
   };
 
-  // Add inline styles to ensure no focus outline appears
   const buttonStyle = {
     outline: 'none',
   };
@@ -33,7 +32,8 @@ const CopyButton = ({ text, className = '', children }: CopyButtonProps) => {
     <button
       type="button"
       className={`${className}`}
-      onClick={handleCopy}
+      onClick={handleCopyClick}
+      disabled={disabled || copied}
       title={copied ? 'Copied!' : 'Copy to clipboard'}
       style={buttonStyle}
     >

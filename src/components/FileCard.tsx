@@ -31,6 +31,13 @@ const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComp
   const handlePreview = useCallback(() => {
     onPreview(filePath);
   }, [onPreview, filePath]);
+  
+  const textToCopy = useMemo(() => {
+    if (isBinary) {
+        return `File: ${filePath}\nThis is a file of the type: ${file.fileType || 'BINARY'}\n`;
+    }
+    return file.content || '';
+  }, [file, isBinary, filePath]);
 
   return (
     <div className={`file-card ${isSelected ? 'selected' : ''} ${isBinary ? 'binary-card' : ''}`}>
@@ -47,7 +54,10 @@ const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComp
         {isBinary ? (
           <div className="file-card-file-size">~{formattedSize}</div>
         ) : (
-          <div className="file-card-tokens">~{formattedTokens} tokens</div>
+          <div className="file-card-tokens">
+            {file.isTokenEstimate ? '~' : ''}{formattedTokens} tokens
+            {file.isTokenEstimate && <span className="estimate-badge" title="Estimated tokens">est</span>}
+          </div>
         )}
       </div>
 
@@ -72,7 +82,7 @@ const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComp
             <button className="file-card-action" onClick={handlePreview} title="Preview File">
               <Eye size={16} />
             </button>
-            <CopyButton text={file.content} className="file-card-action">
+            <CopyButton onClick={async () => navigator.clipboard.writeText(textToCopy)} className="file-card-action">
               {''}
             </CopyButton>
           </>

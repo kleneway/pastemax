@@ -12,6 +12,7 @@ import './styles/base/Buttons.css';
 import './styles/base/Input.css';
 import './styles/base/Utilities.css';
 import './styles/base/ToggleSwitch.css';
+import './styles/components/ProcessingOverlay.css';
 
 /* ============================== HEADER STYLES ============================ */
 import './styles/header/Header.css';
@@ -41,6 +42,8 @@ import './styles/modals/UpdateModal.css';
 import './styles/modals/CustomTaskTypeModal.css';
 import './styles/modals/WorkspaceManager.css';
 import './styles/modals/CopyHistoryModal.css';
+import './styles/modals/ConfirmUseFolderModal.css';
+import './styles/modals/LargeFolderModal.css';
 
 /**
  * Add an event listener to ensure state is saved properly before a page refresh.

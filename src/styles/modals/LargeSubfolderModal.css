@@ -1,0 +1,161 @@
+.large-subfolder-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.large-subfolder-modal {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.large-subfolder-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.large-subfolder-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.large-subfolder-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background-color var(--transition-fast);
+}
+
+.large-subfolder-modal-close:hover {
+  background-color: var(--hover-color);
+  color: var(--text-primary);
+}
+
+.large-subfolder-modal-content {
+  padding: 24px;
+}
+
+.large-subfolder-modal-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--warning-color);
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background-color: rgba(243, 156, 18, 0.1);
+  border: 1px solid rgba(243, 156, 18, 0.3);
+  border-radius: 8px;
+}
+
+.large-subfolder-modal-details {
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.large-subfolder-modal-details p {
+  margin: 0 0 16px 0;
+}
+
+.large-subfolder-modal-details p:last-child {
+  margin-bottom: 0;
+}
+
+.estimate-indicator {
+  color: var(--color-primary);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.estimate-notice {
+  font-size: 14px;
+  color: var(--text-secondary);
+  background-color: var(--background-secondary);
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid var(--color-primary);
+}
+
+.large-subfolder-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.large-subfolder-modal-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  min-width: 100px;
+}
+
+.large-subfolder-modal-btn-secondary {
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.large-subfolder-modal-btn-secondary:hover {
+  background-color: var(--hover-color);
+}
+
+.large-subfolder-modal-btn-primary {
+  background-color: var(--color-primary);
+  color: var(--background-primary);
+  border-color: var(--color-primary);
+}
+
+.large-subfolder-modal-btn-primary:hover {
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+/* Dark mode adjustments */
+.dark-mode .large-subfolder-modal-overlay {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.dark-mode .large-subfolder-modal {
+  background: var(--background-primary);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.dark-mode .large-subfolder-modal-warning {
+  background-color: rgba(243, 156, 18, 0.15);
+  border-color: rgba(243, 156, 18, 0.4);
+}
