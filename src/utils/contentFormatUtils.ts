@@ -144,6 +144,11 @@ export const formatContentForCopying = ({
 
   let concatenatedString = '';
 
+  // Add user instructions block FIRST if present
+  if (userInstructions.trim()) {
+    concatenatedString += `<user_instructions>\n${userInstructions.trim()}\n</user_instructions>\n`;
+  }
+
   // Add ASCII file tree if enabled within <file_map> tags
   if (includeFileTree && selectedFolder) {
     const normalizedFolder = normalizePath(selectedFolder);
@@ -190,11 +195,6 @@ export const formatContentForCopying = ({
   concatenatedString += `</file_contents>`;
   // Add consistent double newline after section
   concatenatedString += '\n\n';
-
-  // Add user instructions at the end if present with consistent spacing
-  if (userInstructions.trim()) {
-    concatenatedString += `<user_instructions>\n${userInstructions.trim()}\n</user_instructions>`;
-  }
 
   return concatenatedString;
 };
