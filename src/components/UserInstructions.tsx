@@ -5,6 +5,7 @@ import React, {
   useRef,
   //MouseEvent as ReactMouseEvent,
 } from 'react';
+import { Eraser } from 'lucide-react';
 import { DEFAULT_TASK_TYPES, STORAGE_KEY_CUSTOM_TASK_TYPES } from '../types/TaskTypes';
 
 /**
@@ -90,6 +91,10 @@ const UserInstructions = ({
       window.removeEventListener('customTaskTypesUpdated', handleCustomTaskTypesUpdated);
     };
   }, []);
+
+  const handleClearInstructions = useCallback(() => {
+    setInstructions('');
+  }, [setInstructions]);
 
   // Update instructions when task type changes
   useEffect(() => {
@@ -274,6 +279,18 @@ const UserInstructions = ({
       {/* Section header */}
       <div className="content-header">
         <div className="content-title">User Instructions</div>
+        <div className="content-header-actions-group">
+          <button
+            type="button"
+            className="text-button"
+            onClick={handleClearInstructions}
+            title="Clear instructions"
+            aria-label="Clear instructions"
+          >
+            <Eraser size={14} />
+            Clear
+          </button>
+        </div>
       </div>
 
       {/* Instructions input container */}
