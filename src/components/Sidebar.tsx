@@ -3,7 +3,8 @@ import { SidebarProps, TreeNode } from '../types/FileTypes';
 import SearchBar from './SearchBar';
 import TreeItem from './TreeItem';
 import TaskTypeSelector from './TaskTypeSelector';
-import { ListChecks, ListX, FolderMinus, FolderPlus } from 'lucide-react';
+import { ListChecks, ListX, FolderMinus, FolderPlus, GitCommit } from 'lucide-react';
+import ChangedFilesPanel from './ChangedFilesPanel';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -28,6 +29,7 @@ const Sidebar = ({
   onSearchChange,
   selectAllFiles,
   deselectAllFiles,
+  selectChangedFiles,
   expandedNodes,
   toggleExpanded,
   includeBinaryPaths,
@@ -42,6 +44,7 @@ const Sidebar = ({
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const [isChangesPanelOpen, setIsChangesPanelOpen] = useState(false);
 
   // Sidebar width constraints for a good UX
   const MIN_SIDEBAR_WIDTH = 200;
@@ -378,6 +381,15 @@ const Sidebar = ({
           <ListX size={18} />
         </button>
         <button
+          className={`sidebar-action-btn ${isChangesPanelOpen ? 'active' : ''}`}
+          title="Toggle Git changes panel"
+          onClick={() => setIsChangesPanelOpen(prev => !prev)}
+          aria-label="Toggle Git changes panel"
+          type="button"
+        >
+          <GitCommit size={18} />
+        </button>
+        <button
           className="sidebar-action-btn"
           title="Collapse all folders"
           onClick={collapseAllFolders}
@@ -396,6 +408,18 @@ const Sidebar = ({
           <FolderPlus size={18} />
         </button>
       </div>
+
+      {/* Git Changes panel - conditionally rendered */}
+      {isChangesPanelOpen && (
+        <ChangedFilesPanel
+          selectedFolder={selectedFolder}
+          allFiles={allFiles}
+          selectedFiles={selectedFiles}
+          includeBinaryPaths={includeBinaryPaths}
+          onAddAll={selectChangedFiles}
+          onAddSingle={(p) => toggleFileSelection(p)}
+        />
+      )}
 
       {allFiles.length > 0 ? (
         isTreeBuildingComplete ? (

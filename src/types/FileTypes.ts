@@ -37,6 +37,7 @@ export interface SidebarProps {
   onSearchChange: (term: string) => void;
   selectAllFiles: () => void;
   deselectAllFiles: () => void;
+  selectChangedFiles: () => void;
   expandedNodes: Record<string, boolean>;
   toggleExpanded: (nodeId: string) => void;
   includeBinaryPaths: boolean;

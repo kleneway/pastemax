@@ -28,6 +28,7 @@ import CopyHistoryModal, { CopyHistoryItem } from './components/CopyHistoryModal
 import CopyHistoryButton from './components/CopyHistoryButton';
 import ModelDropdown from './components/ModelDropdown';
 import ToggleSwitch from './components/base/ToggleSwitch';
+import SavedPromptsDropdown from './components/SavedPromptsDropdown';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -1468,6 +1469,76 @@ const App = (): JSX.Element => {
     }
   };
 
+  // Add all Git-changed files (modified, staged, untracked) within the selected folder to selection
+  const selectChangedFiles = async () => {
+    if (!selectedFolder) return;
+
+    if (!isElectron) {
+      setProcessingStatus({ status: 'error', message: 'Git integration requires Electron app' });
+      return;
+    }
+
+    try {
+      setProcessingStatus({ status: 'processing', message: 'Finding changed files…' });
+      const result = await window.electron.ipcRenderer.invoke('get-changed-files', {
+        folderPath: selectedFolder,
+      });
+
+      if (!result || result.error) {
+        setProcessingStatus({
+          status: 'error',
+          message: result?.error || 'Failed to get changed files',
+        });
+        return;
+      }
+
+      const changedAbsPaths: string[] = Array.isArray(result.files) ? result.files : [];
+      if (changedAbsPaths.length === 0) {
+        setProcessingStatus({ status: 'complete', message: 'No uncommitted changes found' });
+        return;
+      }
+
+      // Map to FileData entries we know about and that are selectable under current settings
+      const eligible = allFiles
+        .filter((f: FileData) =>
+          changedAbsPaths.some((p) => arePathsEqual(normalizePath(p), normalizePath(f.path)))
+        )
+        .filter(
+          (f: FileData) => !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
+        )
+        .map((f: FileData) => normalizePath(f.path));
+
+      if (eligible.length === 0) {
+        setProcessingStatus({ status: 'complete', message: 'No changed files matched filters' });
+        return;
+      }
+
+      setSelectedFiles((prev: string[]) => {
+        const set = new Set(prev.map(normalizePath));
+        eligible.forEach((p) => set.add(p));
+        return Array.from(set);
+      });
+
+      setProcessingStatus({
+        status: 'complete',
+        message: `Added ${eligible.length} changed file${eligible.length === 1 ? '' : 's'}`,
+      });
+    } catch (err) {
+      setProcessingStatus({ status: 'error', message: 'Error selecting changed files' });
+    }
+  };
+
+  // Insert a saved prompt into the user instructions
+  const handleInsertSavedPrompt = (promptText: string) => {
+    setUserInstructions((prev) => {
+      const trimmedPrev = (prev || '').trim();
+      // Place saved prompt at the top, followed by any existing notes
+      return trimmedPrev
+        ? `${promptText}\n\n${trimmedPrev}`
+        : promptText;
+    });
+  };
+
   // Handle copy from history
   const handleCopyFromHistory = async (content: string) => {
     try {
@@ -1552,6 +1623,7 @@ const App = (): JSX.Element => {
               >
                 <FolderOpen size={16} />
               </button>
+              <SavedPromptsDropdown onInsert={handleInsertSavedPrompt} />
               <button
                 className="clear-data-btn"
                 onClick={clearSavedState}
@@ -1654,6 +1726,7 @@ const App = (): JSX.Element => {
               onSearchChange={handleSearchChange}
               selectAllFiles={selectAllFiles}
               deselectAllFiles={deselectAllFiles}
+              selectChangedFiles={selectChangedFiles}
               expandedNodes={expandedNodes}
               toggleExpanded={toggleExpanded}
               includeBinaryPaths={includeBinaryPaths}

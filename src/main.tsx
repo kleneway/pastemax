@@ -16,6 +16,7 @@ import './styles/base/ToggleSwitch.css';
 /* ============================== HEADER STYLES ============================ */
 import './styles/header/Header.css';
 import './styles/header/ThemeToggle.css';
+import './styles/header/SavedPrompts.css';
 
 /* ============================== SIDEBAR STYLES =========================== */
 import './styles/sidebar/Sidebar.css';
