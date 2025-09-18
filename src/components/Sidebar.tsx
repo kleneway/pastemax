@@ -439,17 +439,19 @@ const Sidebar = ({
         />
       )}
 
-      {allFiles.length > 0 ? (
-        isTreeBuildingComplete ? (
-          <div className="file-tree">{renderedTreeItems}</div>
+      {!isChangesPanelOpen && (
+        allFiles.length > 0 ? (
+          isTreeBuildingComplete ? (
+            <div className="file-tree">{renderedTreeItems}</div>
+          ) : (
+            <div className="tree-loading">
+              <div className="spinner"></div>
+              <span>Building file tree...</span>
+            </div>
+          )
         ) : (
-          <div className="tree-loading">
-            <div className="spinner"></div>
-            <span>Building file tree...</span>
-          </div>
+          <div className="tree-empty">No files found in this folder.</div>
         )
-      ) : (
-        <div className="tree-empty">No files found in this folder.</div>
       )}
 
       <div

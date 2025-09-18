@@ -514,6 +514,11 @@ body {
   padding: 8px 16px;
   animation: slideDown 0.2s ease-out;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
 }
 
 @keyframes slideDown {
@@ -553,7 +558,9 @@ body {
 }
 
 .changes-list {
-  max-height: 160px;
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
   overflow: auto;
   background-color: var(--background-primary);
   border: var(--standard-border);
@@ -651,12 +658,31 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .changes-commit-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.commit-range-toggle {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+}
+
+.commit-range-toggle:hover {
+  color: var(--text-primary);
+  background: none;
+}
+
+.commit-range-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .changes-commit-title {

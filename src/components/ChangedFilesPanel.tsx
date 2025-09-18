@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import type { GitChangedFile, GitCommitSummary } from '../types/GitTypes';
 import { arePathsEqual, normalizePath } from '../utils/pathUtils';
-import { RefreshCw, Plus, History, GitCommit as GitCommitIcon } from 'lucide-react';
+import {
+  RefreshCw,
+  Plus,
+  History,
+  GitCommit as GitCommitIcon,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 
 interface ChangedFilesPanelProps {
   selectedFolder: string | null;
@@ -48,6 +55,7 @@ const ChangedFilesPanel = ({
   const [selectedCommit, setSelectedCommit] = useState('');
   const [filesForCommit, setFilesForCommit] = useState<GitChangedFile[]>([]);
   const [isLoadingCommitFiles, setIsLoadingCommitFiles] = useState(false);
+  const [isCommitRangeCollapsed, setIsCommitRangeCollapsed] = useState(false);
   const lastFolderRef = useRef<string | null>(null);
 
   const normalizedFolder = selectedFolder ? normalizePath(selectedFolder) : null;
@@ -237,6 +245,8 @@ const ChangedFilesPanel = ({
     }
   };
 
+  const commitRangeBodyId = 'commit-range-body';
+
   return (
     <div className="changes-panel">
       <div className="changes-header">
@@ -310,6 +320,16 @@ const ChangedFilesPanel = ({
       <div className="changes-commit-controls">
         <div className="changes-commit-header">
           <span className="changes-commit-title">
+            <button
+              type="button"
+              className="icon-button commit-range-toggle"
+              onClick={() => setIsCommitRangeCollapsed((prev) => !prev)}
+              aria-expanded={!isCommitRangeCollapsed}
+              aria-controls={commitRangeBodyId}
+              title={isCommitRangeCollapsed ? 'Expand commit range' : 'Collapse commit range'}
+            >
+              {isCommitRangeCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            </button>
             <GitCommitIcon size={14} /> Commit Range
           </span>
           <button
@@ -321,33 +341,37 @@ const ChangedFilesPanel = ({
             <History size={14} /> Refresh
           </button>
         </div>
-        {isCommitHistoryLoading && <div className="changes-empty">Loading commit history…</div>}
-        {!isCommitHistoryLoading && commitHistoryError && (
-          <div className="changes-error">{commitHistoryError}</div>
+        {!isCommitRangeCollapsed && (
+          <div id={commitRangeBodyId} className="commit-range-body">
+            {isCommitHistoryLoading && <div className="changes-empty">Loading commit history…</div>}
+            {!isCommitHistoryLoading && commitHistoryError && (
+              <div className="changes-error">{commitHistoryError}</div>
+            )}
+            <div className="commit-selector">
+              <select
+                value={selectedCommit}
+                onChange={(event) => setSelectedCommit(event.target.value)}
+                disabled={gitCommitHistory.length === 0}
+              >
+                <option value="">Select a commit…</option>
+                {gitCommitHistory.map((commit) => (
+                  <option key={commit.hash} value={commit.hash}>
+                    {formatCommitLabel(commit)}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="primary"
+                onClick={handleAddSinceCommit}
+                disabled={!selectedCommit}
+                title="Add files changed in the selected commit and everything after it"
+              >
+                Add Since
+              </button>
+            </div>
+            <div className="commit-hint">Adds all files changed since the selected commit (including uncommitted changes).</div>
+          </div>
         )}
-        <div className="commit-selector">
-          <select
-            value={selectedCommit}
-            onChange={(event) => setSelectedCommit(event.target.value)}
-            disabled={gitCommitHistory.length === 0}
-          >
-            <option value="">Select a commit…</option>
-            {gitCommitHistory.map((commit) => (
-              <option key={commit.hash} value={commit.hash}>
-                {formatCommitLabel(commit)}
-              </option>
-            ))}
-          </select>
-          <button
-            className="primary"
-            onClick={handleAddSinceCommit}
-            disabled={!selectedCommit}
-            title="Add files changed in the selected commit and everything after it"
-          >
-            Add Since
-          </button>
-        </div>
-        <div className="commit-hint">Adds all files changed since the selected commit (including uncommitted changes).</div>
       </div>
     </div>
   );
