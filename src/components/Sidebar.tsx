@@ -30,6 +30,16 @@ const Sidebar = ({
   selectAllFiles,
   deselectAllFiles,
   selectChangedFiles,
+  gitChangedFiles,
+  gitChangesLoading,
+  gitChangesError,
+  onRefreshGitChanges,
+  onAddChangedFilesSinceCommit,
+  gitCommitHistory,
+  loadCommitHistory,
+  isCommitHistoryLoading,
+  commitHistoryError,
+  selectedDiffPaths,
   expandedNodes,
   toggleExpanded,
   includeBinaryPaths,
@@ -413,11 +423,19 @@ const Sidebar = ({
       {isChangesPanelOpen && (
         <ChangedFilesPanel
           selectedFolder={selectedFolder}
-          allFiles={allFiles}
           selectedFiles={selectedFiles}
-          includeBinaryPaths={includeBinaryPaths}
+          changedFiles={gitChangedFiles}
+          selectedDiffPaths={selectedDiffPaths}
+          gitChangesLoading={gitChangesLoading}
+          gitChangesError={gitChangesError}
+          onRefreshChanges={onRefreshGitChanges}
           onAddAll={selectChangedFiles}
           onAddSingle={(p) => toggleFileSelection(p)}
+          onAddSinceCommit={onAddChangedFilesSinceCommit}
+          gitCommitHistory={gitCommitHistory}
+          loadCommitHistory={loadCommitHistory}
+          isCommitHistoryLoading={isCommitHistoryLoading}
+          commitHistoryError={commitHistoryError}
         />
       )}
 

@@ -1,3 +1,5 @@
+import type { GitChangedFile, GitCommitSummary } from './GitTypes';
+
 export type IgnoreMode = 'automatic' | 'global';
 // Hot reload occurs when mode changes.
 
@@ -9,6 +11,7 @@ export interface FileData {
   size: number;
   isBinary: boolean;
   isSkipped: boolean;
+  relativePath?: string;
   error?: string;
   fileType?: string;
   excludedByDefault?: boolean;
@@ -38,6 +41,16 @@ export interface SidebarProps {
   selectAllFiles: () => void;
   deselectAllFiles: () => void;
   selectChangedFiles: () => void;
+  gitChangedFiles: GitChangedFile[];
+  gitChangesLoading: boolean;
+  gitChangesError: string | null;
+  onRefreshGitChanges: () => Promise<unknown> | void;
+  onAddChangedFilesSinceCommit: (commitHash: string) => void;
+  gitCommitHistory: GitCommitSummary[];
+  loadCommitHistory: (limit?: number) => Promise<unknown> | void;
+  isCommitHistoryLoading: boolean;
+  commitHistoryError: string | null;
+  selectedDiffPaths: string[];
   expandedNodes: Record<string, boolean>;
   toggleExpanded: (nodeId: string) => void;
   includeBinaryPaths: boolean;

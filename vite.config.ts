@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   base: './', // Relative base path for assets
   build: {
-    outDir: 'dist',
+    outDir: 'electron/dist',
     emptyOutDir: true,
     sourcemap: true,
   },
@@ -15,5 +15,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  server: {
+    port: 8765,
+    strictPort: true,
   },
 });

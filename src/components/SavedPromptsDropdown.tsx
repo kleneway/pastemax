@@ -71,7 +71,6 @@ const SavedPromptsDropdown = ({ onInsert, className = '' }: SavedPromptsDropdown
         setPrompts(defaultPrompts);
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Failed to parse saved prompts:', e);
       // Fallback to samples if parsing fails
       setPrompts(defaultPrompts);
@@ -83,7 +82,6 @@ const SavedPromptsDropdown = ({ onInsert, className = '' }: SavedPromptsDropdown
     try {
       localStorage.setItem(STORAGE_KEY_SAVED_PROMPTS, JSON.stringify(prompts));
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Failed to save prompts:', e);
     }
   }, [prompts]);

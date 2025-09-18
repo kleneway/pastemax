@@ -29,7 +29,7 @@ let currentProgress = { directories: 0, files: 0 };
 // ======================
 // PATH UTILITIES
 // ======================
-const { normalizePath, ensureAbsolutePath } = require('./utils.js');
+const { normalizePath, ensureAbsolutePath, safeRelativePath } = require('./utils.js');
 
 // ======================
 // IGNORE MANAGEMENT
@@ -146,7 +146,7 @@ ipcMain.on('clear-ignore-cache', () => {
 });
 
 // --- WSL-aware folder picker ---
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { isWSLPath } = require('./utils.js');
 ipcMain.on('open-folder', async (event, arg) => {
   let defaultPath = undefined;
@@ -201,75 +201,424 @@ ipcMain.on('open-folder', async (event, arg) => {
 
 // Fetch list of files changed but not yet committed (modified, staged, untracked, renames)
 // Returns absolute normalized paths limited to the provided folder
-ipcMain.handle('get-changed-files', async (_event, { folderPath } = {}) => {
-  const run = (cmd) =>
-    new Promise((resolve) => {
-      exec(cmd, { timeout: 10000 }, (err, stdout, stderr) => {
-        if (err) return resolve({ error: stderr || err.message });
-        resolve({ stdout });
+// ======================
+// GIT HELPERS
+// ======================
+const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null';
+const DEFAULT_GIT_TIMEOUT = 15000;
+
+function execGitCommand(basePath, args, options = {}) {
+  const cwd = ensureAbsolutePath(basePath);
+  const timeout = options.timeout ?? DEFAULT_GIT_TIMEOUT;
+
+  return new Promise((resolve) => {
+    execFile('git', ['-C', cwd, ...args], { timeout }, (err, stdout = '', stderr = '') => {
+      if (err && err.code !== 1) {
+        resolve({ error: stderr.trim() || err.message, code: err.code || 1 });
+        return;
+      }
+
+      resolve({
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+        code: err?.code ?? 0,
       });
     });
+  });
+}
 
+async function resolveRepoRoot(folderPath) {
+  if (!folderPath) {
+    return { error: 'No folder selected' };
+  }
+
+  const normalizedFolder = ensureAbsolutePath(folderPath);
+  const rootRes = await execGitCommand(normalizedFolder, ['rev-parse', '--show-toplevel']);
+  if (rootRes.error) {
+    return { error: 'Not a git repository or git not available' };
+  }
+
+  return { repoRoot: normalizePath(rootRes.stdout.trim()) };
+}
+
+function parsePorcelainEntries(rawOutput, repoRoot) {
+  const entries = (rawOutput || '').split('\0').filter(Boolean);
+  const byPath = new Map();
+  const normalizedRepoRoot = normalizePath(repoRoot);
+
+  for (let i = 0; i < entries.length; i++) {
+    const record = entries[i];
+    if (!record || record.length < 3) continue;
+
+    const xy = record.slice(0, 2);
+    const x = xy[0];
+    const y = xy[1];
+    let relPath = record.slice(3).trim();
+    let prevPath;
+
+    // Skip deleted entries entirely as the file no longer exists locally
+    if (x === 'D' || y === 'D') continue;
+
+    // Handle renames / copies: the next entry is the target path
+    if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
+      prevPath = relPath;
+      const nextPath = entries[i + 1];
+      if (nextPath) {
+        relPath = nextPath.trim();
+        i += 1;
+      }
+    }
+
+    // Ensure proper path normalization
+    const normalizedRel = normalizePath(relPath);
+    const absolutePath = normalizePath(path.join(normalizedRepoRoot, relPath));
+
+    const entry = {
+      repoRoot: normalizedRepoRoot,
+      absolutePath,
+      relativePath: normalizedRel,
+      status: xy,
+      indexStatus: x === ' ' ? undefined : x,
+      worktreeStatus: y === ' ' ? undefined : y,
+      isUntracked: xy === '??',
+    };
+
+    if (prevPath) {
+      entry.oldRelativePath = normalizePath(prevPath);
+    }
+
+    byPath.set(normalizedRel, entry);
+  }
+
+  return Array.from(byPath.values());
+}
+
+function isPathWithin(targetPath, basePath) {
+  const normalizedTarget = ensureAbsolutePath(targetPath);
+  let normalizedBase = ensureAbsolutePath(basePath);
+
+  if (process.platform === 'win32') {
+    if (normalizedBase) normalizedBase = normalizedBase.toLowerCase();
+  }
+
+  const targetComparable =
+    process.platform === 'win32' ? normalizedTarget.toLowerCase() : normalizedTarget;
+
+  if (!normalizedBase.endsWith('/')) {
+    normalizedBase += '/';
+  }
+
+  return (
+    targetComparable === normalizedBase.slice(0, -1) ||
+    targetComparable.startsWith(normalizedBase)
+  );
+}
+
+async function collectGitStatusEntries(folderPath) {
+  const rootResult = await resolveRepoRoot(folderPath);
+  if (rootResult.error) return rootResult;
+
+  const { repoRoot } = rootResult;
+  const statusRes = await execGitCommand(repoRoot, ['status', '--porcelain=v1', '-z', '-uall']);
+  if (statusRes.error) return { error: statusRes.error };
+
+  const entries = parsePorcelainEntries(statusRes.stdout, repoRoot);
+  return { repoRoot, entries };
+}
+
+ipcMain.handle('get-changed-files', async (_event, { folderPath } = {}) => {
   if (!folderPath) {
     return { error: 'No folder selected' };
   }
 
   try {
-    // Ensure we are inside a git repo and find repo root
-    const rootRes = await run(`git -C "${folderPath}" rev-parse --show-toplevel`);
-    if (rootRes.error) return { error: 'Not a git repository or git not available' };
-    const repoRoot = normalizePath(rootRes.stdout.trim());
+    const statusResult = await collectGitStatusEntries(folderPath);
+    if (statusResult.error) return statusResult;
 
-    // Use porcelain -z to robustly capture all change types, including renames
-    const statusRes = await run(`git -C "${repoRoot}" status --porcelain=v1 -z -uall`);
-    if (statusRes.error) return { error: statusRes.error };
+    const { repoRoot, entries } = statusResult;
+    const selectedFolderAbs = ensureAbsolutePath(folderPath);
 
-    const entries = (statusRes.stdout || '').split('\0').filter(Boolean);
-    const relPaths = new Set();
+    const withinFolder = entries.filter((entry) =>
+      isPathWithin(entry.absolutePath, selectedFolderAbs)
+    );
 
-    for (let i = 0; i < entries.length; i++) {
-      const rec = entries[i];
-      if (!rec || rec.length < 3) continue; // XY + space + path
-      const xy = rec.slice(0, 2);
-      const rest = rec.slice(3);
-      const x = xy[0];
-      const y = xy[1];
-
-      // Skip deleted paths (not present on disk to include in context)
-      if (x === 'D' || y === 'D') continue;
-
-      // Handle renames/copies: next entry is the new path
-      if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
-        const newPath = entries[i + 1];
-        if (newPath) {
-          relPaths.add(newPath);
-          i += 1;
-        } else {
-          relPaths.add(rest);
-        }
-        continue;
-      }
-
-      // Everything else (including '??' untracked)
-      relPaths.add(rest);
-    }
-
-    // Limit to the requested folder (which might be a subfolder of the repo)
-    const path = require('path');
-    const selectedFolderAbs = normalizePath(path.resolve(folderPath));
-
-    const absPaths = Array.from(relPaths)
-      .map((p) => normalizePath(path.join(repoRoot, p)))
-      .filter((abs) => {
-        const inside = ensureAbsolutePath(abs).startsWith(ensureAbsolutePath(selectedFolderAbs));
-        return inside;
-      });
-
-    return { files: absPaths };
+    return { repoRoot, files: withinFolder };
   } catch (e) {
     return { error: e?.message || 'Failed to get changed files' };
   }
 });
+
+ipcMain.handle('get-commit-history', async (_event, { folderPath, limit = 20 } = {}) => {
+  if (!folderPath) {
+    return { error: 'No folder selected' };
+  }
+
+  try {
+    const rootResult = await resolveRepoRoot(folderPath);
+    if (rootResult.error) return rootResult;
+
+    const { repoRoot } = rootResult;
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const logRes = await execGitCommand(repoRoot, [
+      'log',
+      `-n`,
+      String(safeLimit),
+      '--pretty=format:%H%x09%ct%x09%s',
+    ]);
+
+    if (logRes.error) return { error: logRes.error };
+
+    const commits = (logRes.stdout || '')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, timestamp, ...messageParts] = line.split('	');
+        const subject = messageParts.join('	').trim();
+        const unixSeconds = parseInt(timestamp, 10);
+        return {
+          hash,
+          subject,
+          timestamp: unixSeconds,
+          isoDate: Number.isFinite(unixSeconds)
+            ? new Date(unixSeconds * 1000).toISOString()
+            : null,
+        };
+      });
+
+    return { repoRoot, commits };
+  } catch (e) {
+    return { error: e?.message || 'Failed to load commit history' };
+  }
+});
+
+ipcMain.handle(
+  'get-files-since-commit',
+  async (_event, { folderPath, commit, includeWorkingTree = true } = {}) => {
+    if (!folderPath) return { error: 'No folder selected' };
+    if (!commit || typeof commit !== 'string') return { error: 'Commit hash is required' };
+
+    // Basic validation for commit hash (accept short hashes)
+    const cleanCommit = commit.trim();
+    if (!/^[0-9a-fA-F]{4,40}$/.test(cleanCommit)) {
+      return { error: 'Invalid commit hash format' };
+    }
+
+    try {
+      const rootResult = await resolveRepoRoot(folderPath);
+      if (rootResult.error) return rootResult;
+
+      const { repoRoot } = rootResult;
+      const selectedFolderAbs = ensureAbsolutePath(folderPath);
+
+      // Verify commit exists and get full hash
+      const verifyRes = await execGitCommand(repoRoot, ['rev-parse', '--verify', `${cleanCommit}^{commit}`]);
+      if (verifyRes.error) return { error: `Commit '${cleanCommit}' not found in this repository` };
+
+      const fullCommitHash = verifyRes.stdout.trim();
+
+      // Step 1: Get all files changed from commit to HEAD
+      // Use git log to get all files modified since (and including) the commit
+      const filesFromCommitRes = await execGitCommand(repoRoot, [
+        'diff',
+        '--name-only',
+        '--diff-filter=ACMR',
+        `${fullCommitHash}^..HEAD`,
+      ]);
+
+      let committedFilesList = [];
+
+      if (filesFromCommitRes.error) {
+        // Handle initial commit (no parent)
+        console.log('Handling initial commit or error, using fallback approach');
+
+        // Get files changed after the commit
+        const afterCommitRes = await execGitCommand(repoRoot, [
+          'diff',
+          '--name-only',
+          '--diff-filter=ACMR',
+          `${fullCommitHash}..HEAD`,
+        ]);
+
+        // Get files changed IN the commit itself
+        const inCommitRes = await execGitCommand(repoRoot, [
+          'diff-tree',
+          '--no-commit-id',
+          '--name-only',
+          '--diff-filter=ACMR',
+          '-r',
+          '--root',
+          fullCommitHash,
+        ]);
+
+        // Combine both lists
+        const afterFiles = (afterCommitRes.stdout || '').split('\n').filter(Boolean);
+        const inFiles = (inCommitRes.stdout || '').split('\n').filter(Boolean);
+        committedFilesList = [...new Set([...afterFiles, ...inFiles])];
+      } else {
+        committedFilesList = (filesFromCommitRes.stdout || '').split('\n').filter(Boolean);
+      }
+
+      console.log(`Files changed since commit ${cleanCommit}: ${committedFilesList.length}`);
+
+      // Step 2: Get all uncommitted changes separately
+      let uncommittedFiles = [];
+      if (includeWorkingTree) {
+        const statusRes = await execGitCommand(repoRoot, ['status', '--porcelain=v1', '-z', '-uall']);
+
+        if (!statusRes.error && statusRes.stdout) {
+          // Parse the porcelain output using the existing logic
+          const entries = parsePorcelainEntries(statusRes.stdout, repoRoot);
+          uncommittedFiles = entries.filter(entry =>
+            isPathWithin(entry.absolutePath, selectedFolderAbs)
+          );
+          console.log(`Uncommitted changes found: ${uncommittedFiles.length}`);
+        }
+      }
+
+      // Step 3: Combine both lists, with uncommitted taking precedence
+      const allFilesMap = new Map();
+
+      // First add committed files
+      committedFilesList.forEach(relPath => {
+        const normalizedRel = normalizePath(relPath);
+        const absPath = normalizePath(path.join(repoRoot, relPath));
+
+        if (isPathWithin(absPath, selectedFolderAbs)) {
+          allFilesMap.set(absPath, {
+            repoRoot,
+            absolutePath: absPath,
+            relativePath: normalizedRel,
+            status: 'M',  // Default status for committed files
+            isUntracked: false,
+          });
+        }
+      });
+
+      // Then add/override with uncommitted changes (these have more detailed status)
+      uncommittedFiles.forEach(entry => {
+        allFilesMap.set(entry.absolutePath, entry);
+      });
+
+      const finalFiles = Array.from(allFilesMap.values());
+
+      console.log(`Total files since commit ${cleanCommit}:`);
+      console.log(`  - Committed changes: ${committedFilesList.length} files`);
+      console.log(`  - Uncommitted changes: ${uncommittedFiles.length} files`);
+      console.log(`  - Combined unique: ${finalFiles.length} files`);
+
+      return { repoRoot, files: finalFiles };
+    } catch (e) {
+      console.error('Error in get-files-since-commit:', e);
+      return { error: e?.message || 'Failed to load files for commit range' };
+    }
+  }
+);
+
+ipcMain.handle(
+  'get-selected-files-diff',
+  async (
+    _event,
+    { folderPath, filePaths = [], contextLines = 3 } = {}
+  ) => {
+    if (!folderPath) return { error: 'No folder selected' };
+    if (!Array.isArray(filePaths) || filePaths.length === 0) {
+      return { diff: '', changedPaths: [] };
+    }
+
+    try {
+      console.log(
+        `[GitDiff] Request received for ${filePaths.length} file(s) in folder: ${folderPath}`
+      );
+      const statusResult = await collectGitStatusEntries(folderPath);
+      if (statusResult.error) return statusResult;
+
+      const { repoRoot, entries } = statusResult;
+      const statusMap = new Map(entries.map((entry) => [entry.relativePath, entry]));
+
+      const normalizedFiles = filePaths
+        .map((fp) => ensureAbsolutePath(fp))
+        .map((abs) => {
+          const normalizedAbs = normalizePath(abs);
+          return {
+            absolutePath: normalizedAbs,
+            relativePath: safeRelativePath(repoRoot, normalizedAbs),
+          };
+        })
+        .filter(({ relativePath }) => relativePath && !relativePath.startsWith('..'));
+
+      const tracked = [];
+      const untracked = [];
+      const changedPaths = [];
+
+      normalizedFiles.forEach(({ absolutePath, relativePath }) => {
+        const entry = statusMap.get(normalizePath(relativePath));
+        if (!entry) return;
+
+        changedPaths.push(absolutePath);
+        if (entry.isUntracked) {
+          untracked.push({ absolutePath, relativePath });
+        } else {
+          tracked.push({ absolutePath, relativePath });
+        }
+      });
+
+      console.log(
+        `[GitDiff] Normalized ${normalizedFiles.length} file(s) -> ${tracked.length} tracked / ${untracked.length} untracked`
+      );
+
+      if (tracked.length === 0 && untracked.length === 0) {
+        console.log('[GitDiff] No tracked or untracked entries matched requested files');
+        return { diff: '', changedPaths: [] };
+      }
+
+      let diffOutput = '';
+
+      if (tracked.length > 0) {
+        const trackedArgs = [
+          'diff',
+          `-U${Math.max(Number(contextLines) || 3, 0)}`,
+          'HEAD',
+          '--',
+          ...tracked.map((item) => item.relativePath),
+        ];
+        const trackedDiff = await execGitCommand(repoRoot, trackedArgs, { timeout: 20000 });
+        if (!trackedDiff.error) {
+          diffOutput += trackedDiff.stdout;
+        } else {
+          console.warn('[GitDiff] tracked diff command returned error:', trackedDiff.error);
+        }
+      }
+
+      for (const item of untracked) {
+        const untrackedDiff = await execGitCommand(repoRoot, [
+          'diff',
+          `-U${Math.max(Number(contextLines) || 3, 0)}`,
+          '--no-index',
+          '--',
+          NULL_DEVICE,
+          item.absolutePath,
+        ]);
+
+        if (!untrackedDiff.error) {
+          diffOutput += untrackedDiff.stdout;
+        } else {
+          console.warn('[GitDiff] untracked diff command returned error:', untrackedDiff.error);
+        }
+      }
+
+      console.log(
+        `[GitDiff] Built diff output of ${diffOutput.length} characters for ${changedPaths.length} path(s)`
+      );
+
+      return {
+        diff: diffOutput.trimEnd(),
+        changedPaths,
+      };
+    } catch (e) {
+      return { error: e?.message || 'Failed to build diff for selected files' };
+    }
+  }
+);
 
 if (!ipcMain.eventNames().includes('get-ignore-patterns')) {
   ipcMain.handle(
@@ -714,7 +1063,7 @@ function createWindow() {
   });
 
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:8765');
     mainWindow.webContents.openDevTools();
   } else {
     const prodPath = app.isPackaged

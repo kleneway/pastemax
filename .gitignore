@@ -62,6 +62,7 @@ CLAUDE.md
 # Release builds
 release-builds/
 dist/
+temp-tests/
 
 # Repomix
 repomix-output.xml
@@ -70,4 +71,3 @@ repomix.config.json
 
 # Roo
 .roomodes
-

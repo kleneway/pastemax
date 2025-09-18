@@ -53,12 +53,20 @@
 .stats-info {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  text-transform: capitalize;
+  text-transform: none;
   color: var(--text-primary);
   margin-left: var(--space-md);
   margin-bottom: var(--space-sm);
   margin-top: var(--space-sm);
   margin-right: var(--space-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.stats-separator {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 .dark-mode .content-header {
   border-color: var(--border-color);

@@ -4,6 +4,7 @@ import ConfirmUseFolderModal from './components/ConfirmUseFolderModal';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
 import { FileData, IgnoreMode } from './types/FileTypes';
+import type { GitChangedFile, GitCommitSummary } from './types/GitTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import IgnoreListModal from './components/IgnoreListModal';
 import ThemeToggle from './components/ThemeToggle';
@@ -34,7 +35,7 @@ import SavedPromptsDropdown from './components/SavedPromptsDropdown';
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { normalizePath, arePathsEqual, isSubPath, join, dirname } from './utils/pathUtils';
+import { normalizePath, arePathsEqual, isSubPath, dirname } from './utils/pathUtils';
 
 /**
  * Import utility functions for content formatting and language detection.
@@ -60,6 +61,7 @@ const STORAGE_KEYS = {
   IGNORE_MODE: 'pastemax-ignore-mode',
   IGNORE_SETTINGS_MODIFIED: 'pastemax-ignore-settings-modified',
   INCLUDE_BINARY_PATHS: 'pastemax-include-binary-paths',
+  INCLUDE_GIT_DIFFS: 'pastemax-include-git-diffs',
   TASK_TYPE: STORAGE_KEY_TASK_TYPE,
   WORKSPACES: 'pastemax-workspaces',
   CURRENT_WORKSPACE: 'pastemax-current-workspace',
@@ -161,6 +163,19 @@ const App = (): JSX.Element => {
   const [includeBinaryPaths, setIncludeBinaryPaths] = useState(
     localStorage.getItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS) === 'true'
   );
+  const [includeGitDiffs, setIncludeGitDiffs] = useState(
+    localStorage.getItem(STORAGE_KEYS.INCLUDE_GIT_DIFFS) === 'true'
+  );
+
+  /* ============================== STATE: Git Integration ============================== */
+  const [gitChangedFiles, setGitChangedFiles] = useState<Record<string, GitChangedFile>>({});
+  const [isGitChangesLoading, setIsGitChangesLoading] = useState(false);
+  const [gitChangesError, setGitChangesError] = useState<string | null>(null);
+  const [gitCommitHistory, setGitCommitHistory] = useState<GitCommitSummary[]>([]);
+  const [isCommitHistoryLoading, setIsCommitHistoryLoading] = useState(false);
+  const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
+  const [selectedFilesDiff, setSelectedFilesDiff] = useState('');
+  const [selectedDiffPaths, setSelectedDiffPaths] = useState<string[]>([]);
 
   /* ============================== STATE: UI Controls ============================== */
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -230,6 +245,7 @@ const App = (): JSX.Element => {
     setSortOrder('tokens-desc');
     setExpandedNodes({});
     setIncludeFileTree(false);
+    setIncludeGitDiffs(false);
     setProcessingStatus({ status: 'idle', message: 'All saved data cleared' });
 
     // Also cancel any ongoing directory loading and clear main process caches
@@ -296,6 +312,17 @@ const App = (): JSX.Element => {
     }
   }, [selectedFolder]);
 
+  useEffect(() => {
+    setGitChangedFiles({});
+    setGitChangesError(null);
+    setGitCommitHistory([]);
+    setIsGitChangesLoading(false);
+    setIsCommitHistoryLoading(false);
+    setCommitHistoryError(null);
+    setSelectedFilesDiff('');
+    setSelectedDiffPaths([]);
+  }, [selectedFolder]);
+
   // Persist selected files when they change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify(selectedFiles));
@@ -320,6 +347,11 @@ const App = (): JSX.Element => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS, String(includeBinaryPaths));
   }, [includeBinaryPaths]);
+
+  // Persist includeGitDiffs when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.INCLUDE_GIT_DIFFS, String(includeGitDiffs));
+  }, [includeGitDiffs]);
 
   // Persist task type when it changes
   useEffect(() => {
@@ -937,10 +969,22 @@ const App = (): JSX.Element => {
    * @returns {string} The concatenated content ready for copying
    */
   const getSelectedFilesContent = () => {
+    const baseContent = formatBaseFileContent({
+      files: allFiles,
+      selectedFiles,
+      sortOrder,
+      includeFileTree,
+      includeBinaryPaths,
+      selectedFolder,
+      gitDiff: includeGitDiffs ? selectedFilesDiff : undefined,
+    });
+
+    const instructionsBlock = formatUserInstructionsBlock(userInstructions);
+
     return (
-      cachedBaseContentString +
-      (cachedBaseContentString && userInstructions.trim() ? '\n\n' : '') +
-      formatUserInstructionsBlock(userInstructions)
+      baseContent +
+      (baseContent && instructionsBlock ? '\n\n' : '') +
+      instructionsBlock
     );
   };
 
@@ -1064,6 +1108,7 @@ const App = (): JSX.Element => {
         includeFileTree,
         includeBinaryPaths,
         selectedFolder,
+        gitDiff: includeGitDiffs ? selectedFilesDiff : undefined,
       });
 
       setCachedBaseContentString(baseContent);
@@ -1092,6 +1137,8 @@ const App = (): JSX.Element => {
     includeFileTree,
     includeBinaryPaths,
     selectedFolder,
+    selectedFilesDiff,
+    includeGitDiffs,
     isElectron,
   ]);
 
@@ -1439,6 +1486,131 @@ const App = (): JSX.Element => {
     ? workspaces.find((w: Workspace) => w.id === currentWorkspaceId)?.name || 'Untitled'
     : null;
 
+  const refreshGitChangedFiles = useCallback(async () => {
+    if (!selectedFolder || !isElectron) {
+      setGitChangedFiles({});
+      return [] as GitChangedFile[];
+    }
+
+    setIsGitChangesLoading(true);
+    setGitChangesError(null);
+
+    try {
+      const result = await window.electron.ipcRenderer.invoke('get-changed-files', {
+        folderPath: selectedFolder,
+      });
+
+      if (!result || result.error) {
+        const errorMessage = result?.error || 'Failed to get changed files';
+        setGitChangesError(errorMessage);
+        setGitChangedFiles({});
+        return [] as GitChangedFile[];
+      }
+
+      const incoming: GitChangedFile[] = Array.isArray(result.files)
+        ? result.files
+            .map((file: any) => {
+              if (!file) return null;
+              const absolutePath = normalizePath(
+                file.absolutePath || file.absPath || file.path || file
+              );
+              if (!absolutePath) return null;
+
+              const status = typeof file.status === 'string' ? file.status : '';
+              const indexStatus =
+                typeof file.indexStatus === 'string'
+                  ? file.indexStatus
+                  : status.length > 0
+                  ? status[0]
+                  : '';
+              const worktreeStatus =
+                typeof file.worktreeStatus === 'string'
+                  ? file.worktreeStatus
+                  : status.length > 1
+                  ? status[1]
+                  : '';
+
+              return {
+                absolutePath,
+                relativePath: normalizePath(file.relativePath || file.repoRelativePath || ''),
+                status,
+                indexStatus,
+                worktreeStatus,
+                isUntracked: Boolean(file.isUntracked || status === '??'),
+                oldRelativePath: file.oldRelativePath
+                  ? normalizePath(file.oldRelativePath)
+                  : undefined,
+              } as GitChangedFile;
+            })
+            .filter(Boolean)
+        : [];
+
+      const map = incoming.reduce((acc, file) => {
+        acc[file.absolutePath] = file;
+        return acc;
+      }, {} as Record<string, GitChangedFile>);
+
+      setGitChangedFiles(map);
+      return incoming;
+    } catch (error: any) {
+      console.error('Failed to refresh git changed files', error);
+      setGitChangedFiles({});
+      setGitChangesError(error?.message || 'Failed to get changed files');
+      return [] as GitChangedFile[];
+    } finally {
+      setIsGitChangesLoading(false);
+    }
+  }, [selectedFolder, isElectron]);
+
+  const loadCommitHistory = useCallback(
+    async (limit = 20) => {
+      if (!selectedFolder || !isElectron) {
+        setGitCommitHistory([]);
+        setCommitHistoryError(null);
+        return [] as GitCommitSummary[];
+      }
+
+      setIsCommitHistoryLoading(true);
+      setCommitHistoryError(null);
+
+      try {
+        const result = await window.electron.ipcRenderer.invoke('get-commit-history', {
+          folderPath: selectedFolder,
+          limit,
+        });
+
+        if (!result || result.error) {
+          const message = result?.error || 'Failed to load commit history';
+          setCommitHistoryError(message);
+          setGitCommitHistory([]);
+          return [] as GitCommitSummary[];
+        }
+
+        const commits: GitCommitSummary[] = Array.isArray(result.commits)
+          ? result.commits
+              .map((commit: any) => ({
+                hash: commit?.hash || '',
+                subject: commit?.subject || '',
+                timestamp: Number(commit?.timestamp) || 0,
+                isoDate: commit?.isoDate || null,
+              }))
+              .filter((commit: GitCommitSummary) => Boolean(commit.hash))
+          : [];
+
+        setGitCommitHistory(commits);
+        return commits;
+      } catch (error: any) {
+        console.error('Failed to load commit history', error);
+        setGitCommitHistory([]);
+        setCommitHistoryError(error?.message || 'Failed to load commit history');
+        return [] as GitCommitSummary[];
+      } finally {
+        setIsCommitHistoryLoading(false);
+      }
+    },
+    [selectedFolder, isElectron]
+  );
+
   // Handle copying content to clipboard
   const handleCopy = async () => {
     if (selectedFiles.length === 0) return;
@@ -1480,29 +1652,18 @@ const App = (): JSX.Element => {
 
     try {
       setProcessingStatus({ status: 'processing', message: 'Finding changed files…' });
-      const result = await window.electron.ipcRenderer.invoke('get-changed-files', {
-        folderPath: selectedFolder,
-      });
-
-      if (!result || result.error) {
-        setProcessingStatus({
-          status: 'error',
-          message: result?.error || 'Failed to get changed files',
-        });
-        return;
-      }
-
-      const changedAbsPaths: string[] = Array.isArray(result.files) ? result.files : [];
-      if (changedAbsPaths.length === 0) {
+      const changedEntries = await refreshGitChangedFiles();
+      if (!changedEntries || changedEntries.length === 0) {
         setProcessingStatus({ status: 'complete', message: 'No uncommitted changes found' });
         return;
       }
 
-      // Map to FileData entries we know about and that are selectable under current settings
+      const changedSet = new Set(
+        changedEntries.map((entry) => normalizePath(entry.absolutePath)).filter(Boolean)
+      );
+
       const eligible = allFiles
-        .filter((f: FileData) =>
-          changedAbsPaths.some((p) => arePathsEqual(normalizePath(p), normalizePath(f.path)))
-        )
+        .filter((f: FileData) => changedSet.has(normalizePath(f.path)))
         .filter(
           (f: FileData) => !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
         )
@@ -1524,7 +1685,157 @@ const App = (): JSX.Element => {
         message: `Added ${eligible.length} changed file${eligible.length === 1 ? '' : 's'}`,
       });
     } catch (err) {
+      console.error('Error selecting changed files', err);
       setProcessingStatus({ status: 'error', message: 'Error selecting changed files' });
+    }
+  };
+
+  useEffect(() => {
+    if (!isElectron || !selectedFolder || selectedFiles.length === 0) {
+      setSelectedFilesDiff('');
+      setSelectedDiffPaths([]);
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const loadDiff = async () => {
+      try {
+        const diffPayload = {
+          folderPath: selectedFolder,
+          filePaths: selectedFiles,
+        };
+
+        const invokeGetSelectedDiff = window.electron.getSelectedFilesDiff
+          ? window.electron.getSelectedFilesDiff(diffPayload)
+          : window.electron.ipcRenderer.invoke('get-selected-files-diff', diffPayload);
+
+        const result = await invokeGetSelectedDiff;
+
+        if (cancelled) return;
+
+
+        if (!result || result.error) {
+          if (result?.error) {
+            console.warn('get-selected-files-diff error:', result.error);
+          }
+          setSelectedFilesDiff('');
+          setSelectedDiffPaths([]);
+          return;
+        }
+
+        const diffText = typeof result.diff === 'string' ? result.diff : '';
+        const changed = Array.isArray(result.changedPaths)
+          ? result.changedPaths.map((p: string) => normalizePath(p))
+          : [];
+
+        console.debug(
+          `[GitDiff] Renderer received diff length ${diffText.length} for ${changed.length} path(s)`
+        );
+
+        setSelectedFilesDiff(diffText);
+        setSelectedDiffPaths(changed);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to compute git diff for selection', error);
+          setSelectedFilesDiff('');
+          setSelectedDiffPaths([]);
+        }
+      }
+    };
+
+    // Add debouncing to avoid excessive IPC calls
+    timeoutId = setTimeout(loadDiff, 500);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isElectron, selectedFolder, selectedFiles]);
+
+  const handleAddFilesSinceCommit = async (commitHash: string) => {
+    if (!selectedFolder) return;
+
+    if (!isElectron) {
+      setProcessingStatus({ status: 'error', message: 'Git integration requires Electron app' });
+      return;
+    }
+
+    if (!commitHash) {
+      setProcessingStatus({ status: 'error', message: 'Commit hash is required' });
+      return;
+    }
+
+    try {
+      setProcessingStatus({ status: 'processing', message: 'Selecting files since commit…' });
+      const result = await window.electron.ipcRenderer.invoke('get-files-since-commit', {
+        folderPath: selectedFolder,
+        commit: commitHash,
+      });
+
+      if (!result || result.error) {
+        setProcessingStatus({
+          status: 'error',
+          message: result?.error || 'Failed to load files for commit range',
+        });
+        return;
+      }
+
+      const absolutePaths = (Array.isArray(result.files) ? result.files : [])
+        .map((entry: any) => {
+          if (!entry) return null;
+          if (typeof entry === 'string') return normalizePath(entry);
+          if (typeof entry.absolutePath === 'string') return normalizePath(entry.absolutePath);
+          if (typeof entry.absPath === 'string') return normalizePath(entry.absPath);
+          if (typeof entry.path === 'string') return normalizePath(entry.path);
+          return null;
+        })
+        .filter(Boolean) as string[];
+
+      if (absolutePaths.length === 0) {
+        setProcessingStatus({
+          status: 'complete',
+          message: 'No files found for selected commit range',
+        });
+        return;
+      }
+
+      const pathSet = new Set(absolutePaths.map((p) => normalizePath(p)));
+
+      const eligible = allFiles
+        .filter((f: FileData) => pathSet.has(normalizePath(f.path)))
+        .filter(
+          (f: FileData) => !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
+        )
+        .map((f: FileData) => normalizePath(f.path));
+
+      if (eligible.length === 0) {
+        setProcessingStatus({
+          status: 'complete',
+          message: 'No matching files passed current filters',
+        });
+        return;
+      }
+
+      setSelectedFiles((prev: string[]) => {
+        const set = new Set(prev.map(normalizePath));
+        eligible.forEach((p) => set.add(p));
+        return Array.from(set);
+      });
+
+      setProcessingStatus({
+        status: 'complete',
+        message: `Added ${eligible.length} file${eligible.length === 1 ? '' : 's'} since commit`,
+      });
+    } catch (error) {
+      console.error('Failed to select files since commit', error);
+      setProcessingStatus({
+        status: 'error',
+        message: 'Error selecting files from commit range',
+      });
     }
   };
 
@@ -1727,6 +2038,16 @@ const App = (): JSX.Element => {
               selectAllFiles={selectAllFiles}
               deselectAllFiles={deselectAllFiles}
               selectChangedFiles={selectChangedFiles}
+              gitChangedFiles={Object.values(gitChangedFiles)}
+              gitChangesLoading={isGitChangesLoading}
+              gitChangesError={gitChangesError}
+              onRefreshGitChanges={refreshGitChangedFiles}
+              onAddChangedFilesSinceCommit={handleAddFilesSinceCommit}
+              gitCommitHistory={gitCommitHistory}
+              loadCommitHistory={loadCommitHistory}
+              isCommitHistoryLoading={isCommitHistoryLoading}
+              commitHistoryError={commitHistoryError}
+              selectedDiffPaths={selectedDiffPaths}
               expandedNodes={expandedNodes}
               toggleExpanded={toggleExpanded}
               includeBinaryPaths={includeBinaryPaths}
@@ -1774,9 +2095,15 @@ const App = (): JSX.Element => {
               <div className="content-title">Selected Files</div>
               <div className="content-header-actions-group">
                 <div className="stats-info">
-                  {selectedFolder
-                    ? `${displayedFiles.length} files | ~${totalFormattedContentTokens.toLocaleString()} tokens`
-                    : '0 files | ~0 tokens'}
+                  {selectedFolder ? (
+                    <>
+                      <span>{selectedFiles.length} / {displayedFiles.length} selected</span>
+                      <span className="stats-separator">•</span>
+                      <span>~{totalFormattedContentTokens.toLocaleString()} tokens</span>
+                    </>
+                  ) : (
+                    '0 files | ~0 tokens'
+                  )}
                 </div>
                 {selectedFolder && (
                   <div className="sort-options">
@@ -1898,6 +2225,17 @@ const App = (): JSX.Element => {
                     onChange={(e) => setIncludeBinaryPaths(e.target.checked)}
                   />
                   <label htmlFor="includeBinaryPaths">Include Binary As Paths</label>
+                </div>
+                <div
+                  className="toggle-option-item"
+                  title="Include Git Diffs in the Copyable Content"
+                >
+                  <ToggleSwitch
+                    id="includeGitDiffs"
+                    checked={includeGitDiffs}
+                    onChange={(e) => setIncludeGitDiffs(e.target.checked)}
+                  />
+                  <label htmlFor="includeGitDiffs">Include Git Diffs</label>
                 </div>
               </div>
               <div className="copy-buttons-group">
