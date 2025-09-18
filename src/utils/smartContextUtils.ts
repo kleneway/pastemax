@@ -51,6 +51,9 @@ export interface SmartContextResult {
 const ELLIPSIS_LINE = '…';
 const RANGE_PREFIX = (start: number, end: number): string =>
   `[lines ${start}${end !== start ? `-${end}` : ''}]`;
+const DEFAULT_CAPPED_MAX_LINES = 120;
+const DEFAULT_CAPPED_HEAD_LINES = 80;
+const DEFAULT_CAPPED_TAIL_LINES = 40;
 
 export async function assembleSmartContextContent(
   params: SmartContextParams
@@ -107,25 +110,40 @@ export async function assembleSmartContextContent(
     const diffHunks = resolveDiffHunks(diffMap, normalizedPath, normalizedSelectedFolder);
     const isDiffPath =
       diffPathSet.has(normalizedPath) || (relativePath ? diffPathSet.has(relativePath) : false);
-    const isInDiff = (diffHunks && diffHunks.length > 0) || isDiffPath;
+    const hasHunks = !!(diffHunks && diffHunks.length > 0);
+    const isInDiff = hasHunks || isDiffPath;
 
     if (isInDiff) {
-      const variants = buildExcerptVariants({
-        file,
-        language,
-        hunks: diffHunks,
-        contextLines: effectiveContext,
-        joinThreshold: effectiveJoin,
-      });
+      if (hasHunks) {
+        const variants = buildExcerptVariants({
+          file,
+          language,
+          hunks: diffHunks,
+          contextLines: effectiveContext,
+          joinThreshold: effectiveJoin,
+        });
 
-      // Ensure we have at least one variant – fallback to full file if diff parsing failed
-      const safeVariants = variants.length > 0 ? variants : buildFullVariants(file, language);
+        // Ensure we have at least one variant – fallback to full file if diff parsing failed
+        const safeVariants = variants.length > 0 ? variants : buildFullVariants(file, language);
 
-      candidates.push({
-        priority: 0,
-        variants: safeVariants,
-        isEssential: true,
-      });
+        candidates.push({
+          priority: 0,
+          variants: safeVariants,
+          isEssential: true,
+        });
+      } else {
+        const cappedVariant = buildCappedVariant(file, language, {
+          maxLines: DEFAULT_CAPPED_MAX_LINES,
+          headLines: DEFAULT_CAPPED_HEAD_LINES,
+          tailLines: DEFAULT_CAPPED_TAIL_LINES,
+        });
+
+        candidates.push({
+          priority: 1,
+          variants: [cappedVariant],
+          isEssential: false,
+        });
+      }
       return;
     }
 
@@ -158,7 +176,7 @@ export async function assembleSmartContextContent(
     }
   }
 
-  const enforceBudget = budgetTokens > 0 && Number.isFinite(budgetTokens);
+  const enforceBudget = Number.isFinite(budgetTokens);
   const availableBudget = enforceBudget ? Math.max(budgetTokens - diffTokens, 0) : budgetTokens;
 
   const { included } = await selectVariantsWithinBudget({
@@ -241,6 +259,77 @@ function buildFullVariants(file: FileData, language: string): CandidateVariant[]
   const content = ensureTrailingNewline(file.content);
   const block = `File: ${normalizedPath}\n\`\`\`${language}\n${content}\`\`\`\n\n`;
   return [{ content: block, contextLines: Number.POSITIVE_INFINITY }];
+}
+
+interface CappedVariantOptions {
+  maxLines: number;
+  headLines?: number;
+  tailLines?: number;
+}
+
+function buildCappedVariant(
+  file: FileData,
+  language: string,
+  options: CappedVariantOptions
+): CandidateVariant {
+  const {
+    maxLines,
+    headLines = DEFAULT_CAPPED_HEAD_LINES,
+    tailLines = DEFAULT_CAPPED_TAIL_LINES,
+  } = options;
+
+  const normalizedPath = normalizePath(file.path);
+  const lines = file.content.split(/\r?\n/);
+  const totalLines = lines.length;
+  const effectiveMax = Math.max(1, Math.floor(maxLines));
+
+  let headCount = Math.min(Math.max(0, Math.floor(headLines)), effectiveMax);
+  let tailCount = Math.min(Math.max(0, Math.floor(tailLines)), effectiveMax - headCount);
+
+  if (totalLines <= effectiveMax) {
+    headCount = totalLines;
+    tailCount = 0;
+  } else if (tailCount === 0) {
+    headCount = effectiveMax;
+  } else if (headCount + tailCount > effectiveMax) {
+    tailCount = Math.max(0, effectiveMax - headCount);
+  }
+
+  const ranges: LineRange[] = [];
+
+  if (headCount > 0) {
+    ranges.push({ start: 1, end: headCount });
+  }
+
+  if (tailCount > 0) {
+    const tailStart = Math.max(1, totalLines - tailCount + 1);
+    if (ranges.length === 0 || tailStart > ranges[ranges.length - 1].end + 1) {
+      ranges.push({ start: tailStart, end: totalLines });
+    } else {
+      // Merge overlapping ranges when file is smaller than cap but still exceeds maxLines slightly
+      ranges[ranges.length - 1].end = totalLines;
+    }
+  }
+
+  if (ranges.length === 0) {
+    ranges.push({ start: 1, end: Math.min(totalLines, effectiveMax) });
+  }
+
+  const snippet = ranges
+    .map(({ start, end }) => {
+      const segmentLines = lines.slice(start - 1, end);
+      const header = RANGE_PREFIX(start, end);
+      const body = segmentLines.join('\n');
+      return body ? `${header}\n${body}` : header;
+    })
+    .join(`\n${ELLIPSIS_LINE}\n`);
+
+  const label = totalLines > effectiveMax ? ' (capped excerpt)' : ' (excerpt)';
+  const content = `File: ${normalizedPath}${label}\n\`\`\`${language}\n${ensureTrailingNewline(
+    snippet
+  )}\`\`\`\n\n`;
+
+  return { content, contextLines: 0 };
 }
 
 interface ExcerptBuilderParams {
@@ -360,30 +449,83 @@ function resolveDiffHunks(
   baseFolder: string | null
 ): DiffHunk[] | undefined {
   const normalized = normalizePath(filePath);
+  const candidateKeys = new Set<string>();
+  const trimmedAbsolute = stripLeadingSlashes(normalized);
 
-  const direct = diffMap.get(normalized);
-  if (direct) {
-    return direct;
+  candidateKeys.add(normalized);
+  if (trimmedAbsolute && trimmedAbsolute !== normalized) {
+    candidateKeys.add(trimmedAbsolute);
   }
 
   const relative = relativeTo(baseFolder, normalized);
   if (relative) {
-    const relativeEntry = diffMap.get(relative);
-    if (relativeEntry) {
-      return relativeEntry;
+    const normalizedRelative = normalizePath(relative);
+    candidateKeys.add(normalizedRelative);
+    const trimmedRelative = stripLeadingSlashes(normalizedRelative);
+    if (trimmedRelative && trimmedRelative !== normalizedRelative) {
+      candidateKeys.add(trimmedRelative);
     }
   }
 
-  const segments = normalized.split('/');
-  if (segments.length > 1) {
-    const tailTwo = segments.slice(-2).join('/');
-    const tailEntry = diffMap.get(tailTwo);
-    if (tailEntry) {
-      return tailEntry;
+  for (const key of candidateKeys) {
+    if (!key) continue;
+    const entry = diffMap.get(key);
+    if (entry) {
+      return entry;
     }
   }
 
-  return diffMap.get(segments[segments.length - 1]);
+  return findUniqueSuffixMatch(diffMap, trimmedAbsolute);
+}
+
+function stripLeadingSlashes(path: string): string {
+  return path.replace(/^\/+/, '');
+}
+
+function findUniqueSuffixMatch(
+  diffMap: DiffMap,
+  targetPath: string | undefined
+): DiffHunk[] | undefined {
+  if (!targetPath) return undefined;
+
+  const normalizedTarget = stripLeadingSlashes(normalizePath(targetPath));
+  if (!normalizedTarget) return undefined;
+
+  const segments = normalizedTarget.split('/').filter(Boolean);
+  if (segments.length === 0) return undefined;
+
+  const diffEntries = Array.from(diffMap.keys()).map((key) => ({
+    key,
+    normalized: stripLeadingSlashes(normalizePath(key)),
+  }));
+
+  const totalSegments = segments.length;
+  for (let start = 0; start < totalSegments; start += 1) {
+    const remaining = totalSegments - start;
+    if (totalSegments > 1 && remaining === 1) {
+      continue; // Skip single-segment fallback when original path has multiple segments.
+    }
+
+    const suffix = segments.slice(start).join('/');
+    const matches = diffEntries.filter(({ normalized }) => {
+      return normalized === suffix || normalized.endsWith(`/${suffix}`);
+    });
+    if (matches.length === 1) {
+      return diffMap.get(matches[0].key);
+    }
+  }
+
+  if (totalSegments === 1) {
+    const [suffix] = segments;
+    const matches = diffEntries.filter(
+      ({ normalized }) => normalized === suffix || normalized.endsWith(`/${suffix}`)
+    );
+    if (matches.length === 1) {
+      return diffMap.get(matches[0].key);
+    }
+  }
+
+  return undefined;
 }
 
 interface SelectionParams {
@@ -401,25 +543,35 @@ async function selectVariantsWithinBudget(params: SelectionParams): Promise<{
   const sorted = [...candidates].sort((a, b) => a.priority - b.priority);
   const included: IncludedVariant[] = [];
 
-  const budgetActive = enforceBudget && Number.isFinite(budgetTokens);
+  const budgetActive = enforceBudget;
   let remainingBudget = Math.max(budgetTokens, 0);
 
   for (const candidate of sorted) {
     let chosen: IncludedVariant | null = null;
+    const variantsByPreference =
+      candidate.variants.length > 1 ? [...candidate.variants].reverse() : candidate.variants;
+    let smallestVariant: CandidateVariant | null = null;
+    let smallestVariantTokens: number | null = null;
 
-    for (const variant of candidate.variants) {
+    for (const variant of variantsByPreference) {
       const tokens = await tokenCounter(variant.content);
+      if (!smallestVariant) {
+        smallestVariant = variant;
+        smallestVariantTokens = tokens;
+      }
       if (!budgetActive || tokens <= remainingBudget) {
         chosen = { content: variant.content, tokens };
         break;
       }
     }
 
-    if (!chosen && candidate.isEssential) {
+    if (!chosen && candidate.isEssential && smallestVariant) {
       // For essential content (diff excerpts), pick the smallest variant even if it exceeds the remaining budget.
-      const lastVariant = candidate.variants[candidate.variants.length - 1];
-      const tokens = await tokenCounter(lastVariant.content);
-      chosen = { content: lastVariant.content, tokens };
+      let tokens = smallestVariantTokens;
+      if (tokens === null) {
+        tokens = await tokenCounter(smallestVariant.content);
+      }
+      chosen = { content: smallestVariant.content, tokens };
     }
 
     if (!chosen) {

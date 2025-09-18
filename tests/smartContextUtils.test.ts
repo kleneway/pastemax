@@ -200,3 +200,133 @@ test('diff tokens reduce budget available for non-essential files', async () => 
     'Helper file should be dropped when budget consumed by diff'
   );
 });
+
+test('diff path without hunks uses capped non-essential snippet', async () => {
+  const content = Array.from({ length: 150 }, (_, idx) => `line ${idx + 1}`).join('\n');
+  const ghostFile = makeFile({
+    name: 'ghost.ts',
+    path: '/repo/src/ghost.ts',
+    content,
+    tokenCount: 2000,
+    size: content.length,
+  });
+
+  const result = await assembleSmartContextContent({
+    files: [ghostFile],
+    selectedFiles: ['/repo/src/ghost.ts'],
+    sortOrder: 'name-asc',
+    includeFileTree: false,
+    includeBinaryPaths: false,
+    selectedFolder: '/repo',
+    diffText: '',
+    diffPaths: ['/repo/src/ghost.ts'],
+    includeGitDiffs: false,
+    gitDiff: undefined,
+    budgetTokens: 500,
+    contextLines: 3,
+    joinThreshold: 2,
+    smallFileTokenThreshold: 100,
+    tokenCounter: countTokensStub,
+  });
+
+  assert.ok(
+    result.content.includes('File: /repo/src/ghost.ts (capped excerpt)'),
+    'Expected capped excerpt label'
+  );
+  assert.ok(result.content.includes('[lines 1-80]'), 'Expected head range');
+  assert.ok(result.content.includes('[lines 111-150]'), 'Expected tail range');
+  assert.ok(result.content.includes('…'), 'Expected ellipsis separating ranges');
+  assert.ok(!result.content.includes('line 90'), 'Middle lines should be omitted');
+});
+
+test('excerpt selection prefers smallest variant when budget allows larger', async () => {
+  const lines = Array.from({ length: 30 }, (_, idx) => `line ${idx + 1}`);
+  lines[19] = 'line 20 changed';
+  const content = lines.join('\n');
+
+  const file = makeFile({
+    name: 'change.ts',
+    path: '/repo/src/change.ts',
+    content,
+    tokenCount: 600,
+    size: content.length,
+  });
+
+  const diff = `diff --git a/src/change.ts b/src/change.ts\nindex 1..2 100644\n--- a/src/change.ts\n+++ b/src/change.ts\n@@ -18,3 +18,3 @@\n-line 19\n-line 20\n-line 21\n+line 19\n+line 20 changed\n+line 21\n`;
+
+  const result = await assembleSmartContextContent({
+    files: [file],
+    selectedFiles: ['/repo/src/change.ts'],
+    sortOrder: 'name-asc',
+    includeFileTree: false,
+    includeBinaryPaths: false,
+    selectedFolder: '/repo',
+    diffText: diff,
+    diffPaths: ['/repo/src/change.ts'],
+    includeGitDiffs: false,
+    gitDiff: undefined,
+    budgetTokens: 500,
+    contextLines: 6,
+    joinThreshold: 2,
+    smallFileTokenThreshold: 100,
+    tokenCounter: countTokensStub,
+  });
+
+  assert.ok(result.content.includes('line 20 changed'), 'Changed line should be present');
+  assert.ok(
+    !result.content.includes('line 14'),
+    'Large-context surrounding lines should be skipped when smaller variant fits budget'
+  );
+});
+
+test('diff hunks respect unique suffix matching to avoid collisions', async () => {
+  const uiContent = ['export const Button = () => null;', 'export const Flag = true;'].join('\n');
+  const coreContent = ['export const Button = () => true;', 'export const Badge = false;'].join(
+    '\n'
+  );
+
+  const uiFile = makeFile({
+    name: 'Button.tsx',
+    path: '/repo/packages/ui/Button.tsx',
+    content: uiContent,
+    tokenCount: 200,
+    size: uiContent.length,
+  });
+
+  const coreFile = makeFile({
+    name: 'Button.tsx',
+    path: '/repo/packages/core/Button.tsx',
+    content: coreContent,
+    tokenCount: 200,
+    size: coreContent.length,
+  });
+
+  const diff = `diff --git a/packages/ui/Button.tsx b/packages/ui/Button.tsx\nindex 1..2 100644\n--- a/packages/ui/Button.tsx\n+++ b/packages/ui/Button.tsx\n@@ -1,2 +1,2 @@\n-export const Button = () => null;\n-export const Flag = true;\n+export const Button = () => true;\n+export const Flag = false;\n`;
+
+  const result = await assembleSmartContextContent({
+    files: [uiFile, coreFile],
+    selectedFiles: ['/repo/packages/ui/Button.tsx', '/repo/packages/core/Button.tsx'],
+    sortOrder: 'name-asc',
+    includeFileTree: false,
+    includeBinaryPaths: false,
+    selectedFolder: '/repo/packages',
+    diffText: diff,
+    diffPaths: ['/repo/packages/ui/Button.tsx'],
+    includeGitDiffs: false,
+    gitDiff: undefined,
+    budgetTokens: 500,
+    contextLines: 2,
+    joinThreshold: 2,
+    smallFileTokenThreshold: 0,
+    tokenCounter: countTokensStub,
+  });
+
+  assert.ok(
+    result.content.includes('File: /repo/packages/ui/Button.tsx (excerpt)'),
+    'UI button should produce an excerpt'
+  );
+  assert.ok(
+    !result.content.includes('File: /repo/packages/core/Button.tsx (excerpt)'),
+    'Core button should not inherit UI diff hunks'
+  );
+});

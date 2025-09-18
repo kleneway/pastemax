@@ -72,12 +72,12 @@ const STORAGE_KEYS = {
   COPY_HISTORY: 'pastemax-copy-history',
   SMART_CONTEXT_ENABLED: 'pastemax-smart-context-enabled',
   SMART_CONTEXT_BUDGET_TOKENS: 'pastemax-smart-context-budget-tokens',
-  SMART_CONTEXT_CONTEXT_LINES: 'pastemax-smart-context-context-lines',
 };
 
 const SMART_CONTEXT_JOIN_THRESHOLD = 10;
 const SMART_CONTEXT_SMALL_FILE_TOKENS = 800;
 const LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY = 'pastemax-smart-context-budget-percent';
+const SMART_CONTEXT_DEFAULT_CONTEXT_LINES = 12;
 
 /* ============================== MAIN APP COMPONENT ============================== */
 /**
@@ -192,13 +192,6 @@ const App = (): JSX.Element => {
       return Math.max(fallback, 4000);
     }
     return 20000;
-  });
-  const [smartContextContextLines, setSmartContextContextLines] = useState(() => {
-    const stored = Number(localStorage.getItem(STORAGE_KEYS.SMART_CONTEXT_CONTEXT_LINES));
-    if (Number.isFinite(stored) && stored >= 0) {
-      return Math.min(Math.max(Math.floor(stored), 0), 200);
-    }
-    return 20;
   });
   const [selectedModelContextLength, setSelectedModelContextLength] = useState<number | null>(null);
 
@@ -408,13 +401,6 @@ const App = (): JSX.Element => {
       setSmartContextBudgetTokens(selectedModelContextLength);
     }
   }, [selectedModelContextLength, smartContextBudgetTokens]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEYS.SMART_CONTEXT_CONTEXT_LINES,
-      String(smartContextContextLines)
-    );
-  }, [smartContextContextLines]);
 
   // Persist task type when it changes
   useEffect(() => {
@@ -1064,7 +1050,7 @@ const App = (): JSX.Element => {
           includeGitDiffs,
           gitDiff: includeGitDiffs ? optimizedDiff : undefined,
           budgetTokens: computedBudget,
-          contextLines: smartContextContextLines,
+          contextLines: SMART_CONTEXT_DEFAULT_CONTEXT_LINES,
           joinThreshold: SMART_CONTEXT_JOIN_THRESHOLD,
           smallFileTokenThreshold: SMART_CONTEXT_SMALL_FILE_TOKENS,
         });
@@ -1078,9 +1064,8 @@ const App = (): JSX.Element => {
     }
 
     // Optimize the diff to avoid duplicating new file content
-    const optimizedDiff = includeGitDiffs && selectedFilesDiff
-      ? optimizeGitDiff(selectedFilesDiff)
-      : undefined;
+    const optimizedDiff =
+      includeGitDiffs && selectedFilesDiff ? optimizeGitDiff(selectedFilesDiff) : undefined;
 
     const baseContent = formatBaseFileContent({
       files: allFiles,
@@ -1119,7 +1104,6 @@ const App = (): JSX.Element => {
     selectedFolder,
     selectedModelContextLength,
     smartContextBudgetTokens,
-    smartContextContextLines,
     smartContextEnabled,
     sortOrder,
   ]);
@@ -2409,13 +2393,11 @@ const App = (): JSX.Element => {
                 {smartContextEnabled && (
                   <>
                     <div
-                      className="toggle-option-item"
+                      className="toggle-option-item toggle-option-block"
                       title="Token budget used when assembling smart context excerpts"
                     >
                       <label htmlFor="smartContextBudgetTokens">Context Budget (tokens)</label>
-                      <div
-                        style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}
-                      >
+                      <div className="toggle-option-actions">
                         <input
                           id="smartContextBudgetTokens"
                           type="number"
@@ -2445,30 +2427,8 @@ const App = (): JSX.Element => {
                           Apply
                         </button>
                       </div>
-                      <small style={{ display: 'block', marginTop: '4px', color: '#9ca3af' }}>
+                      <small className="toggle-option-help">
                         Total tokens for excerpts and diff.
-                      </small>
-                    </div>
-                    <div
-                      className="toggle-option-item"
-                      title="Extra lines to include before and after each change"
-                    >
-                      <label htmlFor="smartContextContextLines">Extra Surrounding Lines</label>
-                      <input
-                        id="smartContextContextLines"
-                        type="number"
-                        min={0}
-                        max={200}
-                        value={smartContextContextLines}
-                        onChange={(e) => {
-                          const next = Number(e.target.value);
-                          if (Number.isNaN(next)) return;
-                          const clamped = Math.max(0, Math.min(Math.floor(next), 200));
-                          setSmartContextContextLines(clamped);
-                        }}
-                      />
-                      <small style={{ display: 'block', marginTop: '4px', color: '#9ca3af' }}>
-                        Adds padding around each diff hunk.
                       </small>
                     </div>
                   </>

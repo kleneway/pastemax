@@ -155,6 +155,37 @@
   user-select: none;
 }
 
+.toggle-option-item.toggle-option-block {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  padding-top: var(--space-xs);
+}
+
+.toggle-option-item.toggle-option-block label {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.toggle-option-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.toggle-option-actions input[type='number'],
+.toggle-option-item.toggle-option-block input[type='number'] {
+  width: 140px;
+  max-width: 100%;
+}
+
+.toggle-option-help {
+  display: block;
+  color: var(--text-muted, #9ca3af);
+  font-size: var(--font-size-xs);
+}
+
 .copy-settings-container > .copy-settings-options {
   flex-shrink: 0;
 }
