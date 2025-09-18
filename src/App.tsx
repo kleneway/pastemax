@@ -43,7 +43,11 @@ import { normalizePath, arePathsEqual, isSubPath, dirname } from './utils/pathUt
  * via the languageUtils module internally.
  */
 import { formatBaseFileContent, formatUserInstructionsBlock } from './utils/contentFormatUtils';
+import { assembleSmartContextContent } from './utils/smartContextUtils';
+import { countTokensCached } from './utils/tokenUtils';
+import { optimizeGitDiff } from './utils/diffOptimizationUtils';
 import type { UpdateDisplayState } from './types/UpdateTypes';
+import type { ModelInfo } from './types/ModelTypes';
 
 /* ============================== GLOBAL DECLARATIONS ============================== */
 
@@ -66,7 +70,14 @@ const STORAGE_KEYS = {
   WORKSPACES: 'pastemax-workspaces',
   CURRENT_WORKSPACE: 'pastemax-current-workspace',
   COPY_HISTORY: 'pastemax-copy-history',
+  SMART_CONTEXT_ENABLED: 'pastemax-smart-context-enabled',
+  SMART_CONTEXT_BUDGET_TOKENS: 'pastemax-smart-context-budget-tokens',
+  SMART_CONTEXT_CONTEXT_LINES: 'pastemax-smart-context-context-lines',
 };
+
+const SMART_CONTEXT_JOIN_THRESHOLD = 10;
+const SMART_CONTEXT_SMALL_FILE_TOKENS = 800;
+const LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY = 'pastemax-smart-context-budget-percent';
 
 /* ============================== MAIN APP COMPONENT ============================== */
 /**
@@ -166,6 +177,30 @@ const App = (): JSX.Element => {
   const [includeGitDiffs, setIncludeGitDiffs] = useState(
     localStorage.getItem(STORAGE_KEYS.INCLUDE_GIT_DIFFS) === 'true'
   );
+  const [smartContextEnabled, setSmartContextEnabled] = useState(
+    localStorage.getItem(STORAGE_KEYS.SMART_CONTEXT_ENABLED) === 'true'
+  );
+  const [smartContextBudgetTokens, setSmartContextBudgetTokens] = useState(() => {
+    const stored = Number(localStorage.getItem(STORAGE_KEYS.SMART_CONTEXT_BUDGET_TOKENS));
+    if (Number.isFinite(stored) && stored > 0) {
+      return Math.floor(stored);
+    }
+    const legacyPercent = Number(localStorage.getItem(LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY));
+    if (Number.isFinite(legacyPercent) && legacyPercent > 0) {
+      // Approximate legacy percent with default 70% of a 32k window
+      const fallback = Math.round((legacyPercent / 100) * 32000);
+      return Math.max(fallback, 4000);
+    }
+    return 20000;
+  });
+  const [smartContextContextLines, setSmartContextContextLines] = useState(() => {
+    const stored = Number(localStorage.getItem(STORAGE_KEYS.SMART_CONTEXT_CONTEXT_LINES));
+    if (Number.isFinite(stored) && stored >= 0) {
+      return Math.min(Math.max(Math.floor(stored), 0), 200);
+    }
+    return 20;
+  });
+  const [selectedModelContextLength, setSelectedModelContextLength] = useState<number | null>(null);
 
   /* ============================== STATE: Git Integration ============================== */
   const [gitChangedFiles, setGitChangedFiles] = useState<Record<string, GitChangedFile>>({});
@@ -186,7 +221,6 @@ const App = (): JSX.Element => {
   /* ============================== STATE: User Instructions ============================== */
   const [userInstructions, setUserInstructions] = useState('');
   const [totalFormattedContentTokens, setTotalFormattedContentTokens] = useState(0);
-  const [cachedBaseContentString, setCachedBaseContentString] = useState('');
   const [cachedBaseContentTokens, setCachedBaseContentTokens] = useState(0);
   /**
    * State variable used to trigger data re-fetching when its value changes.
@@ -352,6 +386,35 @@ const App = (): JSX.Element => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.INCLUDE_GIT_DIFFS, String(includeGitDiffs));
   }, [includeGitDiffs]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SMART_CONTEXT_ENABLED, String(smartContextEnabled));
+  }, [smartContextEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEYS.SMART_CONTEXT_BUDGET_TOKENS,
+      String(smartContextBudgetTokens)
+    );
+    localStorage.removeItem(LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY);
+  }, [smartContextBudgetTokens]);
+
+  useEffect(() => {
+    if (
+      selectedModelContextLength &&
+      selectedModelContextLength > 0 &&
+      smartContextBudgetTokens > selectedModelContextLength
+    ) {
+      setSmartContextBudgetTokens(selectedModelContextLength);
+    }
+  }, [selectedModelContextLength, smartContextBudgetTokens]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEYS.SMART_CONTEXT_CONTEXT_LINES,
+      String(smartContextContextLines)
+    );
+  }, [smartContextContextLines]);
 
   // Persist task type when it changes
   useEffect(() => {
@@ -783,7 +846,9 @@ const App = (): JSX.Element => {
     setAllFiles((prevFiles: FileData[]) => {
       const isDuplicate = prevFiles.some((f) => arePathsEqual(f.path, newFile.path));
       const newAllFiles = isDuplicate ? prevFiles : [...prevFiles, newFile];
-      console.log(`[IPC] file-added: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Path: ${newFile.path}`);
+      console.log(
+        `[IPC] file-added: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Path: ${newFile.path}`
+      );
       return newAllFiles;
     });
   }, []);
@@ -791,10 +856,12 @@ const App = (): JSX.Element => {
   const handleFileUpdated = useCallback((updatedFile: FileData) => {
     console.log('[IPC] Received file-updated:', updatedFile);
     setAllFiles((prevFiles: FileData[]) => {
-      const newAllFiles = prevFiles.map((file) => 
+      const newAllFiles = prevFiles.map((file) =>
         arePathsEqual(file.path, updatedFile.path) ? updatedFile : file
       );
-      console.log(`[IPC] file-updated: Count remains: ${newAllFiles.length}, Updated path: ${updatedFile.path}`);
+      console.log(
+        `[IPC] file-updated: Count remains: ${newAllFiles.length}, Updated path: ${updatedFile.path}`
+      );
       return newAllFiles;
     });
   }, []);
@@ -804,17 +871,21 @@ const App = (): JSX.Element => {
       const path = typeof filePathData === 'object' ? filePathData.path : filePathData;
       const normalizedPath = normalizePath(path);
       console.log('[IPC] Received file-removed:', filePathData);
-      
+
       setAllFiles((prevFiles: FileData[]) => {
         const newAllFiles = prevFiles.filter((file) => !arePathsEqual(file.path, normalizedPath));
-        console.log(`[IPC] file-removed: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Removed path: ${normalizedPath}`);
+        console.log(
+          `[IPC] file-removed: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Removed path: ${normalizedPath}`
+        );
         return newAllFiles;
       });
-      
+
       setSelectedFiles((prevSelected: string[]) => {
         const newSelected = prevSelected.filter((p) => !arePathsEqual(p, normalizedPath));
         if (newSelected.length !== prevSelected.length) {
-          console.log(`[IPC] file-removed: Also removed from selectedFiles. Path: ${normalizedPath}`);
+          console.log(
+            `[IPC] file-removed: Also removed from selectedFiles. Path: ${normalizedPath}`
+          );
         }
         return newSelected;
       });
@@ -964,11 +1035,53 @@ const App = (): JSX.Element => {
    * to provide context or special notes to recipients
    */
 
-  /**
-   * Assembles the final content for copying using cached base content
-   * @returns {string} The concatenated content ready for copying
-   */
-  const getSelectedFilesContent = () => {
+  const refreshBaseContent = useCallback(async () => {
+    if (!selectedFiles.length) {
+      setCachedBaseContentTokens(0);
+      return { content: '', tokenCount: 0 };
+    }
+
+    if (smartContextEnabled) {
+      const requestedBudget = Math.max(0, Math.floor(smartContextBudgetTokens));
+      const computedBudget =
+        selectedModelContextLength && selectedModelContextLength > 0 && requestedBudget > 0
+          ? Math.min(requestedBudget, selectedModelContextLength)
+          : requestedBudget;
+
+      try {
+        // Optimize the diff to avoid duplicating new file content
+        const optimizedDiff = selectedFilesDiff ? optimizeGitDiff(selectedFilesDiff) : '';
+
+        const result = await assembleSmartContextContent({
+          files: allFiles,
+          selectedFiles,
+          sortOrder,
+          includeFileTree,
+          includeBinaryPaths,
+          selectedFolder,
+          diffText: optimizedDiff,
+          diffPaths: selectedDiffPaths,
+          includeGitDiffs,
+          gitDiff: includeGitDiffs ? optimizedDiff : undefined,
+          budgetTokens: computedBudget,
+          contextLines: smartContextContextLines,
+          joinThreshold: SMART_CONTEXT_JOIN_THRESHOLD,
+          smallFileTokenThreshold: SMART_CONTEXT_SMALL_FILE_TOKENS,
+        });
+        setCachedBaseContentTokens(result.tokenCount);
+        return result;
+      } catch (error) {
+        console.error('Error assembling smart context content:', error);
+        setCachedBaseContentTokens(0);
+        return { content: '', tokenCount: 0 };
+      }
+    }
+
+    // Optimize the diff to avoid duplicating new file content
+    const optimizedDiff = includeGitDiffs && selectedFilesDiff
+      ? optimizeGitDiff(selectedFilesDiff)
+      : undefined;
+
     const baseContent = formatBaseFileContent({
       files: allFiles,
       selectedFiles,
@@ -976,17 +1089,55 @@ const App = (): JSX.Element => {
       includeFileTree,
       includeBinaryPaths,
       selectedFolder,
-      gitDiff: includeGitDiffs ? selectedFilesDiff : undefined,
+      gitDiff: optimizedDiff,
     });
 
+    if (isElectron && baseContent) {
+      try {
+        const result = await window.electron.ipcRenderer.invoke('get-token-count', baseContent);
+        const tokenCount = typeof result?.tokenCount === 'number' ? result.tokenCount : 0;
+        setCachedBaseContentTokens(tokenCount);
+        return { content: baseContent, tokenCount };
+      } catch (error) {
+        console.error('Error getting base content token count:', error);
+        setCachedBaseContentTokens(0);
+        return { content: baseContent, tokenCount: 0 };
+      }
+    }
+
+    setCachedBaseContentTokens(0);
+    return { content: baseContent, tokenCount: 0 };
+  }, [
+    allFiles,
+    includeBinaryPaths,
+    includeFileTree,
+    includeGitDiffs,
+    isElectron,
+    selectedDiffPaths,
+    selectedFiles,
+    selectedFilesDiff,
+    selectedFolder,
+    selectedModelContextLength,
+    smartContextBudgetTokens,
+    smartContextContextLines,
+    smartContextEnabled,
+    sortOrder,
+  ]);
+
+  /**
+   * Assembles the final content for copying using cached base content
+   * @returns {string} The concatenated content ready for copying
+   */
+  const getSelectedFilesContent = useCallback(async (): Promise<string> => {
+    const { content: baseContent } = await refreshBaseContent();
     const instructionsBlock = formatUserInstructionsBlock(userInstructions);
 
-    return (
-      baseContent +
-      (baseContent && instructionsBlock ? '\n\n' : '') +
-      instructionsBlock
-    );
-  };
+    if (!instructionsBlock) {
+      return baseContent;
+    }
+
+    return baseContent + (baseContent && instructionsBlock ? '\n\n' : '') + instructionsBlock;
+  }, [refreshBaseContent, userInstructions]);
 
   // Handle select all files
   const selectAllFiles = () => {
@@ -1100,47 +1251,11 @@ const App = (): JSX.Element => {
 
   // Cache base content when file selections or formatting options change
   useEffect(() => {
-    const updateBaseContent = async () => {
-      const baseContent = formatBaseFileContent({
-        files: allFiles,
-        selectedFiles,
-        sortOrder,
-        includeFileTree,
-        includeBinaryPaths,
-        selectedFolder,
-        gitDiff: includeGitDiffs ? selectedFilesDiff : undefined,
-      });
-
-      setCachedBaseContentString(baseContent);
-
-      if (isElectron && baseContent) {
-        try {
-          const result = await window.electron.ipcRenderer.invoke('get-token-count', baseContent);
-          if (result?.tokenCount !== undefined) {
-            setCachedBaseContentTokens(result.tokenCount);
-          }
-        } catch (error) {
-          console.error('Error getting base content token count:', error);
-          setCachedBaseContentTokens(0);
-        }
-      } else {
-        setCachedBaseContentTokens(0);
-      }
-    };
-
-    const debounceTimer = setTimeout(updateBaseContent, 300);
+    const debounceTimer = setTimeout(() => {
+      refreshBaseContent();
+    }, 300);
     return () => clearTimeout(debounceTimer);
-  }, [
-    allFiles,
-    selectedFiles,
-    sortOrder,
-    includeFileTree,
-    includeBinaryPaths,
-    selectedFolder,
-    selectedFilesDiff,
-    includeGitDiffs,
-    isElectron,
-  ]);
+  }, [refreshBaseContent]);
 
   // Calculate total tokens when user instructions change
   useEffect(() => {
@@ -1521,14 +1636,14 @@ const App = (): JSX.Element => {
                 typeof file.indexStatus === 'string'
                   ? file.indexStatus
                   : status.length > 0
-                  ? status[0]
-                  : '';
+                    ? status[0]
+                    : '';
               const worktreeStatus =
                 typeof file.worktreeStatus === 'string'
                   ? file.worktreeStatus
                   : status.length > 1
-                  ? status[1]
-                  : '';
+                    ? status[1]
+                    : '';
 
               return {
                 absolutePath,
@@ -1545,10 +1660,13 @@ const App = (): JSX.Element => {
             .filter(Boolean)
         : [];
 
-      const map = incoming.reduce((acc, file) => {
-        acc[file.absolutePath] = file;
-        return acc;
-      }, {} as Record<string, GitChangedFile>);
+      const map = incoming.reduce(
+        (acc, file) => {
+          acc[file.absolutePath] = file;
+          return acc;
+        },
+        {} as Record<string, GitChangedFile>
+      );
 
       setGitChangedFiles(map);
       return incoming;
@@ -1616,7 +1734,7 @@ const App = (): JSX.Element => {
     if (selectedFiles.length === 0) return;
 
     try {
-      const content = getSelectedFilesContent();
+      const content = await getSelectedFilesContent();
       await navigator.clipboard.writeText(content);
       setProcessingStatus({ status: 'complete', message: 'Copied to clipboard!' });
 
@@ -1665,7 +1783,8 @@ const App = (): JSX.Element => {
       const eligible = allFiles
         .filter((f: FileData) => changedSet.has(normalizePath(f.path)))
         .filter(
-          (f: FileData) => !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
+          (f: FileData) =>
+            !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
         )
         .map((f: FileData) => normalizePath(f.path));
 
@@ -1714,7 +1833,6 @@ const App = (): JSX.Element => {
         const result = await invokeGetSelectedDiff;
 
         if (cancelled) return;
-
 
         if (!result || result.error) {
           if (result?.error) {
@@ -1808,7 +1926,8 @@ const App = (): JSX.Element => {
       const eligible = allFiles
         .filter((f: FileData) => pathSet.has(normalizePath(f.path)))
         .filter(
-          (f: FileData) => !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
+          (f: FileData) =>
+            !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
         )
         .map((f: FileData) => normalizePath(f.path));
 
@@ -1844,9 +1963,7 @@ const App = (): JSX.Element => {
     setUserInstructions((prev) => {
       const trimmedPrev = (prev || '').trim();
       // Place saved prompt at the top, followed by any existing notes
-      return trimmedPrev
-        ? `${promptText}\n\n${trimmedPrev}`
-        : promptText;
+      return trimmedPrev ? `${promptText}\n\n${trimmedPrev}` : promptText;
     });
   };
 
@@ -1886,6 +2003,44 @@ const App = (): JSX.Element => {
       setSelectedTaskType(currentTaskType);
     }, 50);
   };
+
+  const handleSuggestBudgetFromSelection = useCallback(async () => {
+    if (!selectedFiles.length) {
+      setSmartContextBudgetTokens(0);
+      return;
+    }
+
+    const baseTokens = selectedFiles.reduce((sum, path) => {
+      const normalized = normalizePath(path);
+      const file = allFiles.find((f) => arePathsEqual(f.path, normalized));
+      return sum + (file?.tokenCount ?? 0);
+    }, 0);
+
+    let diffTokens = 0;
+    if (includeGitDiffs && selectedFilesDiff.trim()) {
+      try {
+        diffTokens = await countTokensCached(selectedFilesDiff.trim());
+      } catch (error) {
+        console.error('Error estimating diff token count:', error);
+      }
+    }
+
+    const total = baseTokens + diffTokens;
+    const clamped =
+      selectedModelContextLength && selectedModelContextLength > 0 && total > 0
+        ? Math.min(total, selectedModelContextLength)
+        : total;
+
+    setSmartContextBudgetTokens(Math.max(0, Math.floor(clamped)));
+  }, [allFiles, includeGitDiffs, selectedFiles, selectedFilesDiff, selectedModelContextLength]);
+
+  const handleApplySmartContextSettings = useCallback(() => {
+    void refreshBaseContent();
+  }, [refreshBaseContent]);
+
+  const handleModelContextChange = useCallback((model: ModelInfo | null) => {
+    setSelectedModelContextLength(model?.context_length ?? null);
+  }, []);
 
   // Handle model selection
   const handleModelSelect = (modelId: string) => {
@@ -2097,7 +2252,9 @@ const App = (): JSX.Element => {
                 <div className="stats-info">
                   {selectedFolder ? (
                     <>
-                      <span>{selectedFiles.length} / {displayedFiles.length} selected</span>
+                      <span>
+                        {selectedFiles.length} / {displayedFiles.length} selected
+                      </span>
                       <span className="stats-separator">•</span>
                       <span>~{totalFormattedContentTokens.toLocaleString()} tokens</span>
                     </>
@@ -2198,6 +2355,7 @@ const App = (): JSX.Element => {
                 externalSelectedModelId={selectedModelId}
                 onModelSelect={handleModelSelect}
                 currentTokenCount={totalFormattedContentTokens}
+                onModelContextChange={handleModelContextChange}
               />
             </div>
 
@@ -2237,6 +2395,84 @@ const App = (): JSX.Element => {
                   />
                   <label htmlFor="includeGitDiffs">Include Git Diffs</label>
                 </div>
+                <div
+                  className="toggle-option-item"
+                  title="Use smart context to keep excerpts within a token budget"
+                >
+                  <ToggleSwitch
+                    id="smartContextEnabled"
+                    checked={smartContextEnabled}
+                    onChange={(e) => setSmartContextEnabled(e.target.checked)}
+                  />
+                  <label htmlFor="smartContextEnabled">Smart Context</label>
+                </div>
+                {smartContextEnabled && (
+                  <>
+                    <div
+                      className="toggle-option-item"
+                      title="Token budget used when assembling smart context excerpts"
+                    >
+                      <label htmlFor="smartContextBudgetTokens">Context Budget (tokens)</label>
+                      <div
+                        style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <input
+                          id="smartContextBudgetTokens"
+                          type="number"
+                          min={0}
+                          step={500}
+                          value={smartContextBudgetTokens}
+                          onChange={(e) => {
+                            const next = Number(e.target.value);
+                            if (Number.isNaN(next)) return;
+                            setSmartContextBudgetTokens(Math.max(0, Math.floor(next)));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="refresh-button"
+                          onClick={() => {
+                            void handleSuggestBudgetFromSelection();
+                          }}
+                        >
+                          Use Selection
+                        </button>
+                        <button
+                          type="button"
+                          className="refresh-button"
+                          onClick={handleApplySmartContextSettings}
+                        >
+                          Apply
+                        </button>
+                      </div>
+                      <small style={{ display: 'block', marginTop: '4px', color: '#9ca3af' }}>
+                        Total tokens for excerpts and diff.
+                      </small>
+                    </div>
+                    <div
+                      className="toggle-option-item"
+                      title="Extra lines to include before and after each change"
+                    >
+                      <label htmlFor="smartContextContextLines">Extra Surrounding Lines</label>
+                      <input
+                        id="smartContextContextLines"
+                        type="number"
+                        min={0}
+                        max={200}
+                        value={smartContextContextLines}
+                        onChange={(e) => {
+                          const next = Number(e.target.value);
+                          if (Number.isNaN(next)) return;
+                          const clamped = Math.max(0, Math.min(Math.floor(next), 200));
+                          setSmartContextContextLines(clamped);
+                        }}
+                      />
+                      <small style={{ display: 'block', marginTop: '4px', color: '#9ca3af' }}>
+                        Adds padding around each diff hunk.
+                      </small>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="copy-buttons-group">
                 <CopyHistoryButton

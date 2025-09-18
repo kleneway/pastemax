@@ -11,9 +11,14 @@
     "allowImportingTsExtensions": false
   },
   "include": [
+    "src/global.d.ts",
     "src/utils/contentFormatUtils.ts",
     "src/utils/pathUtils.ts",
     "src/utils/languageUtils.ts",
+    "src/utils/diffUtils.ts",
+    "src/utils/smartContextUtils.ts",
+    "src/utils/tokenUtils.ts",
+    "src/utils/diffOptimizationUtils.ts",
     "src/types/**/*.ts",
     "tests/**/*.ts"
   ]
