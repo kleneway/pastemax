@@ -8,6 +8,7 @@ export {}; // make this a module
 declare global {
   interface Window {
     electron: {
+      getSelectedFilesDiff?: (data: any) => Promise<any>;
       ipcRenderer: {
         send: (channel: string, data?: any) => void;
         on: (channel: string, func: (...args: any[]) => void) => void;
@@ -34,6 +35,15 @@ declare module 'react-dom/client';
 declare module 'react/jsx-runtime';
 declare module 'electron';
 declare module 'tiktoken';
+declare module 'tiktoken/lite';
+declare module 'tiktoken/encoders/*.json' {
+  const data: {
+    pat_str: string;
+    special_tokens: Record<string, number>;
+    bpe_ranks: string;
+  };
+  export default data;
+}
 declare module 'ignore';
 declare module 'gpt-3-encoder';
 

@@ -19,7 +19,7 @@ console.log('🚀 Starting development environment...');
 process.env.NODE_ENV = 'development';
 
 // Default port
-let vitePort = 3000;
+let vitePort = 8765;
 
 // Start Vite dev server
 console.log('📦 Starting Vite dev server...');
@@ -54,10 +54,10 @@ viteProcess.stderr?.on('data', (data) => {
   const output = data.toString();
   console.error(output); // Echo error output to console
 
-  if (output.includes('Port 3000 is already in use')) {
-    console.error('\n❌ Port 3000 is already in use. Try one of the following:');
+  if (output.includes('Port 8765 is already in use')) {
+    console.error('\n❌ Port 8765 is already in use. Try one of the following:');
     console.error(
-      "  1. Kill the process using port 3000: 'lsof -i :3000 | grep LISTEN' then 'kill -9 [PID]'"
+      "  1. Kill the process using port 8765: 'lsof -i :8765 | grep LISTEN' then 'kill -9 [PID]'"
     );
     console.error('  2. Change the Vite port in vite.config.ts');
     console.error('  3. Restart your computer if the issue persists\n');

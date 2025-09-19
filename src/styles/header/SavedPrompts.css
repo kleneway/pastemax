@@ -1,0 +1,180 @@
+/* ==========================================================================
+   Saved Prompts Dropdown (Header)
+   ========================================================================== */
+
+.saved-prompts-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.saved-prompts-button {
+  background-color: var(--background-tertiary);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  border: none;
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.saved-prompts-button:hover {
+  background-color: var(--hover-color);
+  transform: none;
+}
+
+.saved-prompts-panel {
+  position: absolute;
+  top: calc(100% + var(--space-xs));
+  right: 0;
+  min-width: 340px;
+  max-width: 420px;
+  max-height: 420px;
+  overflow: hidden;
+  background-color: var(--background-primary);
+  border: none;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+}
+
+.saved-prompts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: var(--standard-border);
+}
+.saved-prompts-header .title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+}
+.saved-prompts-header .create-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  background: var(--background-tertiary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.saved-prompts-header .create-button:hover {
+  background: var(--hover-color);
+}
+
+.saved-prompts-search {
+  position: relative;
+  padding: var(--space-sm) var(--space-md);
+}
+.saved-prompts-search input {
+  width: 100%;
+  padding: 8px 28px 8px 10px;
+  border: var(--standard-border);
+  border-radius: 6px;
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+}
+.saved-prompts-search .clear-search {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.saved-prompt-create {
+  padding: 0 var(--space-md) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.saved-prompt-create .name-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: var(--standard-border);
+  border-radius: 6px;
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+}
+.saved-prompt-create .text-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: var(--standard-border);
+  border-radius: 6px;
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  resize: vertical;
+}
+.saved-prompt-create .create-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+.saved-prompt-create .secondary {
+  background: var(--background-tertiary);
+}
+
+.saved-prompts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+.saved-prompts-list .empty {
+  padding: var(--space-md);
+  color: var(--text-secondary);
+}
+.saved-prompt-item {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+  border-top: var(--standard-border);
+}
+.saved-prompt-item:first-child {
+  border-top: none;
+}
+.saved-prompt-item .item-main {
+  flex: 1;
+  text-align: left;
+  display: block;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.saved-prompt-item .item-main:hover {
+  background: var(--hover-color);
+}
+.saved-prompt-item .item-name {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: 2px;
+}
+.saved-prompt-item .item-preview {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+.saved-prompt-item .item-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: var(--space-sm);
+  cursor: pointer;
+}
+.saved-prompt-item .item-delete:hover {
+  color: var(--text-primary);
+}
+
+.dark-mode .saved-prompts-panel {
+  background-color: var(--background-secondary);
+}
+

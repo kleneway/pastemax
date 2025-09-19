@@ -17,6 +17,7 @@ interface FormatContentParams {
   includeBinaryPaths: boolean; // Whether to include binary file paths in output
   selectedFolder: string | null; // Current selected folder path
   userInstructions: string; // User instructions to append to content
+  gitDiff?: string; // Optional aggregated Git diff to include
 }
 
 /**
@@ -39,6 +40,7 @@ export const formatBaseFileContent = ({
   includeFileTree,
   includeBinaryPaths,
   selectedFolder,
+  gitDiff,
 }: Omit<FormatContentParams, 'userInstructions'>): string => {
   // Sort files according to current sort settings
   const sortedSelected = files
@@ -99,6 +101,11 @@ export const formatBaseFileContent = ({
   // Consistent closing of file_contents section
   concatenatedString += `</file_contents>\n`;
 
+  if (gitDiff && gitDiff.trim()) {
+    const trimmedDiff = gitDiff.trimEnd();
+    concatenatedString += `\n<git_diff>\n\`\`\`diff\n${trimmedDiff}\n\`\`\`\n</git_diff>\n`;
+  }
+
   return concatenatedString;
 };
 
@@ -115,6 +122,7 @@ export const formatContentForCopying = ({
   includeBinaryPaths,
   selectedFolder,
   userInstructions,
+  gitDiff,
 }: FormatContentParams): string => {
   // Sort files according to current sort settings
   const sortedSelected = files
@@ -143,11 +151,7 @@ export const formatContentForCopying = ({
   const binaryFiles = sortedSelected.filter((file) => file.isBinary);
 
   let concatenatedString = '';
-
-  // Add user instructions block FIRST if present
-  if (userInstructions.trim()) {
-    concatenatedString += `<user_instructions>\n${userInstructions.trim()}\n</user_instructions>\n`;
-  }
+  const trimmedInstructions = userInstructions.trim();
 
   // Add ASCII file tree if enabled within <file_map> tags
   if (includeFileTree && selectedFolder) {
@@ -196,5 +200,14 @@ export const formatContentForCopying = ({
   // Add consistent double newline after section
   concatenatedString += '\n\n';
 
+  if (gitDiff && gitDiff.trim()) {
+    const trimmedDiff = gitDiff.trimEnd();
+    concatenatedString += `<git_diff>\n\`\`\`diff\n${trimmedDiff}\n\`\`\`\n</git_diff>`;
+    concatenatedString += '\n\n';
+  }
+
+  if (trimmedInstructions) {
+    concatenatedString += `<user_instructions>\n${trimmedInstructions}\n</user_instructions>\n`;
+  }
   return concatenatedString;
 };

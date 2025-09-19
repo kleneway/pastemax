@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('electron', {
    * Expected format: { isUpdateAvailable: boolean, currentVersion: string, latestVersion?: string, releaseUrl?: string, error?: string }
    */
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  getSelectedFilesDiff: (data) =>
+    ipcRenderer.invoke('get-selected-files-diff', ensureSerializable(data)),
   send: (channel, data) => {
     // whitelist channels
     const validChannels = [
@@ -113,6 +115,10 @@ contextBridge.exposeInMainWorld('electron', {
         'check-for-updates',
         'get-token-count',
         'fetch-models',
+        'get-changed-files',
+        'get-commit-history',
+        'get-files-since-commit',
+        'get-selected-files-diff',
       ]; // Added 'fetch-models'
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, data);

@@ -491,9 +491,235 @@ body {
     color 0.3s ease;
 }
 
+/* Active state for toggle buttons */
+.sidebar-action-btn.active {
+  background-color: var(--primary-button-background);
+  color: var(--primary-button-text);
+}
+
+.sidebar-action-btn.active:hover {
+  background-color: var(--primary-button-hover);
+  color: var(--primary-button-text);
+}
+
 /* Make modal transitions smoother */
 .ignore-patterns-modal-overlay {
   transition: opacity 0.2s ease;
+}
+
+/* -------------------- Git Changes Panel -------------------- */
+.changes-panel {
+  border-bottom: var(--standard-border);
+  background-color: var(--background-secondary);
+  padding: 8px 16px;
+  animation: slideDown 0.2s ease-out;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+
+@keyframes slideDown {
+  from {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    max-height: 300px;
+    opacity: 1;
+    padding-top: 8px;
+    padding-bottom: 16px;
+  }
+}
+
+.changes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.changes-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.changes-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.changes-list {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+  overflow: auto;
+  background-color: var(--background-primary);
+  border: var(--standard-border);
+  border-radius: 6px;
+}
+
+.changes-list ul {
+  list-style: none;
+}
+
+.change-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+.change-item:last-child {
+  border-bottom: none;
+}
+
+.change-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.change-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  background-color: var(--background-muted, rgba(0, 0, 0, 0.05));
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.change-status-badge.untracked {
+  color: var(--warning-color);
+}
+
+.change-path {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+  flex: 1;
+}
+
+.change-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background-color: var(--accent-muted, rgba(99, 102, 241, 0.15));
+  color: var(--accent-color, #6366f1);
+  flex-shrink: 0;
+}
+
+.change-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.change-added {
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+.change-disabled {
+  color: var(--text-disabled);
+}
+
+.changes-empty, .changes-error {
+  padding: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.changes-commit-controls {
+  margin-top: 12px;
+  padding: 10px;
+  border: var(--standard-border);
+  border-radius: 6px;
+  background-color: var(--background-secondary, var(--background-primary));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.changes-commit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.commit-range-toggle {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+}
+
+.commit-range-toggle:hover {
+  color: var(--text-primary);
+  background: none;
+}
+
+.commit-range-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.changes-commit-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.commit-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.commit-selector select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: var(--standard-border);
+  background-color: var(--background-primary);
+  color: var(--text-primary);
+}
+
+.commit-selector button.primary {
+  white-space: nowrap;
+  padding: 6px 12px;
+}
+
+.commit-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 /* ==========================================================================

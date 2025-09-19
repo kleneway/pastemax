@@ -8,6 +8,7 @@ interface ModelDropdownProps {
   externalSelectedModelId?: string;
   onModelSelect?: (modelId: string) => void;
   currentTokenCount?: number;
+  onModelContextChange?: (model: ModelInfo | null) => void;
 }
 
 /**
@@ -19,6 +20,7 @@ const ModelDropdown = ({
   externalSelectedModelId,
   onModelSelect,
   currentTokenCount = 0,
+  onModelContextChange,
 }: ModelDropdownProps): JSX.Element => {
   const {
     models,
@@ -66,12 +68,22 @@ const ModelDropdown = ({
   // Handle model selection
   const handleModelSelect = (modelId: string) => {
     setSelectedModelId(modelId);
+    const model = models.find((item: ModelInfo) => item.id === modelId) || null;
+    if (onModelContextChange) {
+      onModelContextChange(model);
+    }
     if (onModelSelect) {
       onModelSelect(modelId);
     }
     setIsOpen(false);
     setSearchTerm('');
   };
+
+  useEffect(() => {
+    if (onModelContextChange) {
+      onModelContextChange(selectedModel ?? null);
+    }
+  }, [selectedModel, onModelContextChange]);
 
   // Filter models based on search term
   const filteredModels = models.filter(

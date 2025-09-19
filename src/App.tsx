@@ -4,6 +4,7 @@ import ConfirmUseFolderModal from './components/ConfirmUseFolderModal';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
 import { FileData, IgnoreMode } from './types/FileTypes';
+import type { GitChangedFile, GitCommitSummary } from './types/GitTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import IgnoreListModal from './components/IgnoreListModal';
 import ThemeToggle from './components/ThemeToggle';
@@ -28,12 +29,13 @@ import CopyHistoryModal, { CopyHistoryItem } from './components/CopyHistoryModal
 import CopyHistoryButton from './components/CopyHistoryButton';
 import ModelDropdown from './components/ModelDropdown';
 import ToggleSwitch from './components/base/ToggleSwitch';
+import SavedPromptsDropdown from './components/SavedPromptsDropdown';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { normalizePath, arePathsEqual, isSubPath, join, dirname } from './utils/pathUtils';
+import { normalizePath, arePathsEqual, isSubPath, dirname } from './utils/pathUtils';
 
 /**
  * Import utility functions for content formatting and language detection.
@@ -41,7 +43,11 @@ import { normalizePath, arePathsEqual, isSubPath, join, dirname } from './utils/
  * via the languageUtils module internally.
  */
 import { formatBaseFileContent, formatUserInstructionsBlock } from './utils/contentFormatUtils';
+import { assembleSmartContextContent } from './utils/smartContextUtils';
+import { countTokensCached } from './utils/tokenUtils';
+import { optimizeGitDiff } from './utils/diffOptimizationUtils';
 import type { UpdateDisplayState } from './types/UpdateTypes';
+import type { ModelInfo } from './types/ModelTypes';
 
 /* ============================== GLOBAL DECLARATIONS ============================== */
 
@@ -59,11 +65,26 @@ const STORAGE_KEYS = {
   IGNORE_MODE: 'pastemax-ignore-mode',
   IGNORE_SETTINGS_MODIFIED: 'pastemax-ignore-settings-modified',
   INCLUDE_BINARY_PATHS: 'pastemax-include-binary-paths',
+  INCLUDE_GIT_DIFFS: 'pastemax-include-git-diffs',
   TASK_TYPE: STORAGE_KEY_TASK_TYPE,
   WORKSPACES: 'pastemax-workspaces',
   CURRENT_WORKSPACE: 'pastemax-current-workspace',
   COPY_HISTORY: 'pastemax-copy-history',
+  SMART_CONTEXT_ENABLED: 'pastemax-smart-context-enabled',
+  SMART_CONTEXT_BUDGET_TOKENS: 'pastemax-smart-context-budget-tokens',
+  SMART_CONTEXT_ALLOCATION: 'pastemax-smart-context-allocation',
 };
+
+const SMART_CONTEXT_DEFAULT_CONTEXT_LINES = 12;
+const SMART_CONTEXT_SMALL_FILE_TOKENS = 400;
+const LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY = 'pastemax-smart-context-budget-percent';
+const SMART_CONTEXT_HEADROOM_RATIO = 0.8;
+
+type SmartContextAllocation = 'balanced' | 'diff' | 'excerpts';
+
+function computeJoinThreshold(contextLines: number): number {
+  return Math.max(2, Math.min(contextLines * 2, 20));
+}
 
 /* ============================== MAIN APP COMPONENT ============================== */
 /**
@@ -160,6 +181,48 @@ const App = (): JSX.Element => {
   const [includeBinaryPaths, setIncludeBinaryPaths] = useState(
     localStorage.getItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS) === 'true'
   );
+  const [includeGitDiffs, setIncludeGitDiffs] = useState(
+    localStorage.getItem(STORAGE_KEYS.INCLUDE_GIT_DIFFS) === 'true'
+  );
+  const [smartContextEnabled, setSmartContextEnabled] = useState(
+    localStorage.getItem(STORAGE_KEYS.SMART_CONTEXT_ENABLED) === 'true'
+  );
+  const [smartContextBudgetTokens, setSmartContextBudgetTokens] = useState(() => {
+    const stored = Number(localStorage.getItem(STORAGE_KEYS.SMART_CONTEXT_BUDGET_TOKENS));
+    if (Number.isFinite(stored) && stored > 0) {
+      return Math.floor(stored);
+    }
+    const legacyPercent = Number(localStorage.getItem(LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY));
+    if (Number.isFinite(legacyPercent) && legacyPercent > 0) {
+      // Approximate legacy percent with default 70% of a 32k window
+      const fallback = Math.round((legacyPercent / 100) * 32000);
+      return Math.max(fallback, 4000);
+    }
+    return 20000;
+  });
+  const [smartContextAllocation, setSmartContextAllocation] = useState<SmartContextAllocation>(
+    () => {
+      const stored = localStorage.getItem(
+        STORAGE_KEYS.SMART_CONTEXT_ALLOCATION
+      ) as SmartContextAllocation | null;
+      return stored ?? 'balanced';
+    }
+  );
+  const [smartContextTokenBreakdown, setSmartContextTokenBreakdown] = useState({
+    diff: 0,
+    excerpts: 0,
+  });
+  const [selectedModelContextLength, setSelectedModelContextLength] = useState<number | null>(null);
+
+  /* ============================== STATE: Git Integration ============================== */
+  const [gitChangedFiles, setGitChangedFiles] = useState<Record<string, GitChangedFile>>({});
+  const [isGitChangesLoading, setIsGitChangesLoading] = useState(false);
+  const [gitChangesError, setGitChangesError] = useState<string | null>(null);
+  const [gitCommitHistory, setGitCommitHistory] = useState<GitCommitSummary[]>([]);
+  const [isCommitHistoryLoading, setIsCommitHistoryLoading] = useState(false);
+  const [commitHistoryError, setCommitHistoryError] = useState<string | null>(null);
+  const [selectedFilesDiff, setSelectedFilesDiff] = useState('');
+  const [selectedDiffPaths, setSelectedDiffPaths] = useState<string[]>([]);
 
   /* ============================== STATE: UI Controls ============================== */
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -170,7 +233,6 @@ const App = (): JSX.Element => {
   /* ============================== STATE: User Instructions ============================== */
   const [userInstructions, setUserInstructions] = useState('');
   const [totalFormattedContentTokens, setTotalFormattedContentTokens] = useState(0);
-  const [cachedBaseContentString, setCachedBaseContentString] = useState('');
   const [cachedBaseContentTokens, setCachedBaseContentTokens] = useState(0);
   /**
    * State variable used to trigger data re-fetching when its value changes.
@@ -229,6 +291,7 @@ const App = (): JSX.Element => {
     setSortOrder('tokens-desc');
     setExpandedNodes({});
     setIncludeFileTree(false);
+    setIncludeGitDiffs(false);
     setProcessingStatus({ status: 'idle', message: 'All saved data cleared' });
 
     // Also cancel any ongoing directory loading and clear main process caches
@@ -295,6 +358,17 @@ const App = (): JSX.Element => {
     }
   }, [selectedFolder]);
 
+  useEffect(() => {
+    setGitChangedFiles({});
+    setGitChangesError(null);
+    setGitCommitHistory([]);
+    setIsGitChangesLoading(false);
+    setIsCommitHistoryLoading(false);
+    setCommitHistoryError(null);
+    setSelectedFilesDiff('');
+    setSelectedDiffPaths([]);
+  }, [selectedFolder]);
+
   // Persist selected files when they change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify(selectedFiles));
@@ -319,6 +393,43 @@ const App = (): JSX.Element => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS, String(includeBinaryPaths));
   }, [includeBinaryPaths]);
+
+  // Persist includeGitDiffs when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.INCLUDE_GIT_DIFFS, String(includeGitDiffs));
+  }, [includeGitDiffs]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SMART_CONTEXT_ENABLED, String(smartContextEnabled));
+  }, [smartContextEnabled]);
+
+  useEffect(() => {
+    if (!smartContextEnabled) {
+      setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+    }
+  }, [smartContextEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEYS.SMART_CONTEXT_BUDGET_TOKENS,
+      String(smartContextBudgetTokens)
+    );
+    localStorage.removeItem(LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY);
+  }, [smartContextBudgetTokens]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SMART_CONTEXT_ALLOCATION, smartContextAllocation);
+  }, [smartContextAllocation]);
+
+  useEffect(() => {
+    if (
+      selectedModelContextLength &&
+      selectedModelContextLength > 0 &&
+      smartContextBudgetTokens > selectedModelContextLength
+    ) {
+      setSmartContextBudgetTokens(selectedModelContextLength);
+    }
+  }, [selectedModelContextLength, smartContextBudgetTokens]);
 
   // Persist task type when it changes
   useEffect(() => {
@@ -750,7 +861,9 @@ const App = (): JSX.Element => {
     setAllFiles((prevFiles: FileData[]) => {
       const isDuplicate = prevFiles.some((f) => arePathsEqual(f.path, newFile.path));
       const newAllFiles = isDuplicate ? prevFiles : [...prevFiles, newFile];
-      console.log(`[IPC] file-added: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Path: ${newFile.path}`);
+      console.log(
+        `[IPC] file-added: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Path: ${newFile.path}`
+      );
       return newAllFiles;
     });
   }, []);
@@ -758,10 +871,12 @@ const App = (): JSX.Element => {
   const handleFileUpdated = useCallback((updatedFile: FileData) => {
     console.log('[IPC] Received file-updated:', updatedFile);
     setAllFiles((prevFiles: FileData[]) => {
-      const newAllFiles = prevFiles.map((file) => 
+      const newAllFiles = prevFiles.map((file) =>
         arePathsEqual(file.path, updatedFile.path) ? updatedFile : file
       );
-      console.log(`[IPC] file-updated: Count remains: ${newAllFiles.length}, Updated path: ${updatedFile.path}`);
+      console.log(
+        `[IPC] file-updated: Count remains: ${newAllFiles.length}, Updated path: ${updatedFile.path}`
+      );
       return newAllFiles;
     });
   }, []);
@@ -771,17 +886,21 @@ const App = (): JSX.Element => {
       const path = typeof filePathData === 'object' ? filePathData.path : filePathData;
       const normalizedPath = normalizePath(path);
       console.log('[IPC] Received file-removed:', filePathData);
-      
+
       setAllFiles((prevFiles: FileData[]) => {
         const newAllFiles = prevFiles.filter((file) => !arePathsEqual(file.path, normalizedPath));
-        console.log(`[IPC] file-removed: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Removed path: ${normalizedPath}`);
+        console.log(
+          `[IPC] file-removed: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Removed path: ${normalizedPath}`
+        );
         return newAllFiles;
       });
-      
+
       setSelectedFiles((prevSelected: string[]) => {
         const newSelected = prevSelected.filter((p) => !arePathsEqual(p, normalizedPath));
         if (newSelected.length !== prevSelected.length) {
-          console.log(`[IPC] file-removed: Also removed from selectedFiles. Path: ${normalizedPath}`);
+          console.log(
+            `[IPC] file-removed: Also removed from selectedFiles. Path: ${normalizedPath}`
+          );
         }
         return newSelected;
       });
@@ -931,17 +1050,118 @@ const App = (): JSX.Element => {
    * to provide context or special notes to recipients
    */
 
+  const refreshBaseContent = useCallback(async () => {
+    if (!selectedFiles.length) {
+      setCachedBaseContentTokens(0);
+      setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+      return { content: '', tokenCount: 0 };
+    }
+
+    if (smartContextEnabled) {
+      const requestedBudget = Math.max(0, Math.floor(smartContextBudgetTokens));
+      const computedBudget =
+        selectedModelContextLength && selectedModelContextLength > 0 && requestedBudget > 0
+          ? Math.min(requestedBudget, selectedModelContextLength)
+          : requestedBudget;
+
+      try {
+        // Optimize the diff to avoid duplicating new file content
+        const optimizedDiff = selectedFilesDiff ? optimizeGitDiff(selectedFilesDiff) : '';
+
+        const result = await assembleSmartContextContent({
+          files: allFiles,
+          selectedFiles,
+          sortOrder,
+          includeFileTree,
+          includeBinaryPaths,
+          selectedFolder,
+          diffText: optimizedDiff,
+          diffPaths: selectedDiffPaths,
+          includeGitDiffs,
+          gitDiff: includeGitDiffs ? optimizedDiff : undefined,
+          budgetTokens: computedBudget,
+          contextLines: SMART_CONTEXT_DEFAULT_CONTEXT_LINES,
+          joinThreshold: computeJoinThreshold(SMART_CONTEXT_DEFAULT_CONTEXT_LINES),
+          smallFileTokenThreshold: SMART_CONTEXT_SMALL_FILE_TOKENS,
+          allocationPreference: smartContextAllocation,
+        });
+        setCachedBaseContentTokens(result.tokenCount);
+        setSmartContextTokenBreakdown({
+          diff: result.diffTokenCount,
+          excerpts: result.excerptTokenCount,
+        });
+        return result;
+      } catch (error) {
+        console.error('Error assembling smart context content:', error);
+        setCachedBaseContentTokens(0);
+        setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+        return { content: '', tokenCount: 0 };
+      }
+    }
+
+    // Optimize the diff to avoid duplicating new file content
+    const optimizedDiff =
+      includeGitDiffs && selectedFilesDiff ? optimizeGitDiff(selectedFilesDiff) : undefined;
+
+    const baseContent = formatBaseFileContent({
+      files: allFiles,
+      selectedFiles,
+      sortOrder,
+      includeFileTree,
+      includeBinaryPaths,
+      selectedFolder,
+      gitDiff: optimizedDiff,
+    });
+
+    if (isElectron && baseContent) {
+      try {
+        const result = await window.electron.ipcRenderer.invoke('get-token-count', baseContent);
+        const tokenCount = typeof result?.tokenCount === 'number' ? result.tokenCount : 0;
+        setCachedBaseContentTokens(tokenCount);
+        setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+        return { content: baseContent, tokenCount };
+      } catch (error) {
+        console.error('Error getting base content token count:', error);
+        setCachedBaseContentTokens(0);
+        setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+        return { content: baseContent, tokenCount: 0 };
+      }
+    }
+
+    setCachedBaseContentTokens(0);
+    setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+    return { content: baseContent, tokenCount: 0 };
+  }, [
+    allFiles,
+    includeBinaryPaths,
+    includeFileTree,
+    includeGitDiffs,
+    isElectron,
+    selectedDiffPaths,
+    selectedFiles,
+    selectedFilesDiff,
+    selectedFolder,
+    selectedModelContextLength,
+    smartContextBudgetTokens,
+    smartContextEnabled,
+    smartContextAllocation,
+    sortOrder,
+  ]);
+
   /**
    * Assembles the final content for copying using cached base content
    * @returns {string} The concatenated content ready for copying
    */
-  const getSelectedFilesContent = () => {
-    return (
-      cachedBaseContentString +
-      (cachedBaseContentString && userInstructions.trim() ? '\n\n' : '') +
-      formatUserInstructionsBlock(userInstructions)
-    );
-  };
+  const getSelectedFilesContent = useCallback(async (): Promise<string> => {
+    const { content: baseContent } = await refreshBaseContent();
+    const instructionsBlock = formatUserInstructionsBlock(userInstructions);
+
+    if (!instructionsBlock) {
+      return baseContent;
+    }
+
+    return baseContent + (baseContent && instructionsBlock ? '\n\n' : '') + instructionsBlock;
+  }, [refreshBaseContent, userInstructions]);
 
   // Handle select all files
   const selectAllFiles = () => {
@@ -1055,44 +1275,11 @@ const App = (): JSX.Element => {
 
   // Cache base content when file selections or formatting options change
   useEffect(() => {
-    const updateBaseContent = async () => {
-      const baseContent = formatBaseFileContent({
-        files: allFiles,
-        selectedFiles,
-        sortOrder,
-        includeFileTree,
-        includeBinaryPaths,
-        selectedFolder,
-      });
-
-      setCachedBaseContentString(baseContent);
-
-      if (isElectron && baseContent) {
-        try {
-          const result = await window.electron.ipcRenderer.invoke('get-token-count', baseContent);
-          if (result?.tokenCount !== undefined) {
-            setCachedBaseContentTokens(result.tokenCount);
-          }
-        } catch (error) {
-          console.error('Error getting base content token count:', error);
-          setCachedBaseContentTokens(0);
-        }
-      } else {
-        setCachedBaseContentTokens(0);
-      }
-    };
-
-    const debounceTimer = setTimeout(updateBaseContent, 300);
+    const debounceTimer = setTimeout(() => {
+      refreshBaseContent();
+    }, 300);
     return () => clearTimeout(debounceTimer);
-  }, [
-    allFiles,
-    selectedFiles,
-    sortOrder,
-    includeFileTree,
-    includeBinaryPaths,
-    selectedFolder,
-    isElectron,
-  ]);
+  }, [refreshBaseContent]);
 
   // Calculate total tokens when user instructions change
   useEffect(() => {
@@ -1438,12 +1625,140 @@ const App = (): JSX.Element => {
     ? workspaces.find((w: Workspace) => w.id === currentWorkspaceId)?.name || 'Untitled'
     : null;
 
+  const refreshGitChangedFiles = useCallback(async () => {
+    if (!selectedFolder || !isElectron) {
+      setGitChangedFiles({});
+      return [] as GitChangedFile[];
+    }
+
+    setIsGitChangesLoading(true);
+    setGitChangesError(null);
+
+    try {
+      const result = await window.electron.ipcRenderer.invoke('get-changed-files', {
+        folderPath: selectedFolder,
+      });
+
+      if (!result || result.error) {
+        const errorMessage = result?.error || 'Failed to get changed files';
+        setGitChangesError(errorMessage);
+        setGitChangedFiles({});
+        return [] as GitChangedFile[];
+      }
+
+      const incoming: GitChangedFile[] = Array.isArray(result.files)
+        ? result.files
+            .map((file: any) => {
+              if (!file) return null;
+              const absolutePath = normalizePath(
+                file.absolutePath || file.absPath || file.path || file
+              );
+              if (!absolutePath) return null;
+
+              const status = typeof file.status === 'string' ? file.status : '';
+              const indexStatus =
+                typeof file.indexStatus === 'string'
+                  ? file.indexStatus
+                  : status.length > 0
+                    ? status[0]
+                    : '';
+              const worktreeStatus =
+                typeof file.worktreeStatus === 'string'
+                  ? file.worktreeStatus
+                  : status.length > 1
+                    ? status[1]
+                    : '';
+
+              return {
+                absolutePath,
+                relativePath: normalizePath(file.relativePath || file.repoRelativePath || ''),
+                status,
+                indexStatus,
+                worktreeStatus,
+                isUntracked: Boolean(file.isUntracked || status === '??'),
+                oldRelativePath: file.oldRelativePath
+                  ? normalizePath(file.oldRelativePath)
+                  : undefined,
+              } as GitChangedFile;
+            })
+            .filter(Boolean)
+        : [];
+
+      const map = incoming.reduce(
+        (acc, file) => {
+          acc[file.absolutePath] = file;
+          return acc;
+        },
+        {} as Record<string, GitChangedFile>
+      );
+
+      setGitChangedFiles(map);
+      return incoming;
+    } catch (error: any) {
+      console.error('Failed to refresh git changed files', error);
+      setGitChangedFiles({});
+      setGitChangesError(error?.message || 'Failed to get changed files');
+      return [] as GitChangedFile[];
+    } finally {
+      setIsGitChangesLoading(false);
+    }
+  }, [selectedFolder, isElectron]);
+
+  const loadCommitHistory = useCallback(
+    async (limit = 20) => {
+      if (!selectedFolder || !isElectron) {
+        setGitCommitHistory([]);
+        setCommitHistoryError(null);
+        return [] as GitCommitSummary[];
+      }
+
+      setIsCommitHistoryLoading(true);
+      setCommitHistoryError(null);
+
+      try {
+        const result = await window.electron.ipcRenderer.invoke('get-commit-history', {
+          folderPath: selectedFolder,
+          limit,
+        });
+
+        if (!result || result.error) {
+          const message = result?.error || 'Failed to load commit history';
+          setCommitHistoryError(message);
+          setGitCommitHistory([]);
+          return [] as GitCommitSummary[];
+        }
+
+        const commits: GitCommitSummary[] = Array.isArray(result.commits)
+          ? result.commits
+              .map((commit: any) => ({
+                hash: commit?.hash || '',
+                subject: commit?.subject || '',
+                timestamp: Number(commit?.timestamp) || 0,
+                isoDate: commit?.isoDate || null,
+              }))
+              .filter((commit: GitCommitSummary) => Boolean(commit.hash))
+          : [];
+
+        setGitCommitHistory(commits);
+        return commits;
+      } catch (error: any) {
+        console.error('Failed to load commit history', error);
+        setGitCommitHistory([]);
+        setCommitHistoryError(error?.message || 'Failed to load commit history');
+        return [] as GitCommitSummary[];
+      } finally {
+        setIsCommitHistoryLoading(false);
+      }
+    },
+    [selectedFolder, isElectron]
+  );
+
   // Handle copying content to clipboard
   const handleCopy = async () => {
     if (selectedFiles.length === 0) return;
 
     try {
-      const content = getSelectedFilesContent();
+      const content = await getSelectedFilesContent();
       await navigator.clipboard.writeText(content);
       setProcessingStatus({ status: 'complete', message: 'Copied to clipboard!' });
 
@@ -1466,6 +1781,214 @@ const App = (): JSX.Element => {
       console.error('Failed to copy:', err);
       setProcessingStatus({ status: 'error', message: 'Failed to copy to clipboard' });
     }
+  };
+
+  // Add all Git-changed files (modified, staged, untracked) within the selected folder to selection
+  const selectChangedFiles = async () => {
+    if (!selectedFolder) return;
+
+    if (!isElectron) {
+      setProcessingStatus({ status: 'error', message: 'Git integration requires Electron app' });
+      return;
+    }
+
+    try {
+      setProcessingStatus({ status: 'processing', message: 'Finding changed files…' });
+      const changedEntries = await refreshGitChangedFiles();
+      if (!changedEntries || changedEntries.length === 0) {
+        setProcessingStatus({ status: 'complete', message: 'No uncommitted changes found' });
+        return;
+      }
+
+      const changedSet = new Set(
+        changedEntries.map((entry) => normalizePath(entry.absolutePath)).filter(Boolean)
+      );
+
+      const eligible = allFiles
+        .filter((f: FileData) => changedSet.has(normalizePath(f.path)))
+        .filter(
+          (f: FileData) =>
+            !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
+        )
+        .map((f: FileData) => normalizePath(f.path));
+
+      if (eligible.length === 0) {
+        setProcessingStatus({ status: 'complete', message: 'No changed files matched filters' });
+        return;
+      }
+
+      setSelectedFiles((prev: string[]) => {
+        const set = new Set(prev.map(normalizePath));
+        eligible.forEach((p) => set.add(p));
+        return Array.from(set);
+      });
+
+      setProcessingStatus({
+        status: 'complete',
+        message: `Added ${eligible.length} changed file${eligible.length === 1 ? '' : 's'}`,
+      });
+    } catch (err) {
+      console.error('Error selecting changed files', err);
+      setProcessingStatus({ status: 'error', message: 'Error selecting changed files' });
+    }
+  };
+
+  useEffect(() => {
+    if (!isElectron || !selectedFolder || selectedFiles.length === 0) {
+      setSelectedFilesDiff('');
+      setSelectedDiffPaths([]);
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const loadDiff = async () => {
+      try {
+        const diffPayload = {
+          folderPath: selectedFolder,
+          filePaths: selectedFiles,
+        };
+
+        const invokeGetSelectedDiff = window.electron.getSelectedFilesDiff
+          ? window.electron.getSelectedFilesDiff(diffPayload)
+          : window.electron.ipcRenderer.invoke('get-selected-files-diff', diffPayload);
+
+        const result = await invokeGetSelectedDiff;
+
+        if (cancelled) return;
+
+        if (!result || result.error) {
+          if (result?.error) {
+            console.warn('get-selected-files-diff error:', result.error);
+          }
+          setSelectedFilesDiff('');
+          setSelectedDiffPaths([]);
+          return;
+        }
+
+        const diffText = typeof result.diff === 'string' ? result.diff : '';
+        const changed = Array.isArray(result.changedPaths)
+          ? result.changedPaths.map((p: string) => normalizePath(p))
+          : [];
+
+        console.debug(
+          `[GitDiff] Renderer received diff length ${diffText.length} for ${changed.length} path(s)`
+        );
+
+        setSelectedFilesDiff(diffText);
+        setSelectedDiffPaths(changed);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to compute git diff for selection', error);
+          setSelectedFilesDiff('');
+          setSelectedDiffPaths([]);
+        }
+      }
+    };
+
+    // Add debouncing to avoid excessive IPC calls
+    timeoutId = setTimeout(loadDiff, 500);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isElectron, selectedFolder, selectedFiles]);
+
+  const handleAddFilesSinceCommit = async (commitHash: string) => {
+    if (!selectedFolder) return;
+
+    if (!isElectron) {
+      setProcessingStatus({ status: 'error', message: 'Git integration requires Electron app' });
+      return;
+    }
+
+    if (!commitHash) {
+      setProcessingStatus({ status: 'error', message: 'Commit hash is required' });
+      return;
+    }
+
+    try {
+      setProcessingStatus({ status: 'processing', message: 'Selecting files since commit…' });
+      const result = await window.electron.ipcRenderer.invoke('get-files-since-commit', {
+        folderPath: selectedFolder,
+        commit: commitHash,
+      });
+
+      if (!result || result.error) {
+        setProcessingStatus({
+          status: 'error',
+          message: result?.error || 'Failed to load files for commit range',
+        });
+        return;
+      }
+
+      const absolutePaths = (Array.isArray(result.files) ? result.files : [])
+        .map((entry: any) => {
+          if (!entry) return null;
+          if (typeof entry === 'string') return normalizePath(entry);
+          if (typeof entry.absolutePath === 'string') return normalizePath(entry.absolutePath);
+          if (typeof entry.absPath === 'string') return normalizePath(entry.absPath);
+          if (typeof entry.path === 'string') return normalizePath(entry.path);
+          return null;
+        })
+        .filter(Boolean) as string[];
+
+      if (absolutePaths.length === 0) {
+        setProcessingStatus({
+          status: 'complete',
+          message: 'No files found for selected commit range',
+        });
+        return;
+      }
+
+      const pathSet = new Set(absolutePaths.map((p) => normalizePath(p)));
+
+      const eligible = allFiles
+        .filter((f: FileData) => pathSet.has(normalizePath(f.path)))
+        .filter(
+          (f: FileData) =>
+            !f.isSkipped && !f.excludedByDefault && (includeBinaryPaths || !f.isBinary)
+        )
+        .map((f: FileData) => normalizePath(f.path));
+
+      if (eligible.length === 0) {
+        setProcessingStatus({
+          status: 'complete',
+          message: 'No matching files passed current filters',
+        });
+        return;
+      }
+
+      setSelectedFiles((prev: string[]) => {
+        const set = new Set(prev.map(normalizePath));
+        eligible.forEach((p) => set.add(p));
+        return Array.from(set);
+      });
+
+      setProcessingStatus({
+        status: 'complete',
+        message: `Added ${eligible.length} file${eligible.length === 1 ? '' : 's'} since commit`,
+      });
+    } catch (error) {
+      console.error('Failed to select files since commit', error);
+      setProcessingStatus({
+        status: 'error',
+        message: 'Error selecting files from commit range',
+      });
+    }
+  };
+
+  // Insert a saved prompt into the user instructions
+  const handleInsertSavedPrompt = (promptText: string) => {
+    setUserInstructions((prev) => {
+      const trimmedPrev = (prev || '').trim();
+      // Place saved prompt at the top, followed by any existing notes
+      return trimmedPrev ? `${promptText}\n\n${trimmedPrev}` : promptText;
+    });
   };
 
   // Handle copy from history
@@ -1504,6 +2027,60 @@ const App = (): JSX.Element => {
       setSelectedTaskType(currentTaskType);
     }, 50);
   };
+
+  const handleSuggestBudgetFromSelection = useCallback(async () => {
+    if (!selectedFiles.length) {
+      setSmartContextBudgetTokens(0);
+      return;
+    }
+
+    const diffText = selectedFilesDiff.trim();
+    let diffTokenEstimate = 0;
+    if (diffText) {
+      try {
+        diffTokenEstimate = await countTokensCached(diffText);
+      } catch (error) {
+        console.error('Error estimating diff token count:', error);
+      }
+    }
+
+    const changedFileTokens = (selectedDiffPaths.length ? selectedDiffPaths : selectedFiles).reduce(
+      (sum, path) => {
+        const normalized = normalizePath(path);
+        const file = allFiles.find((f) => arePathsEqual(f.path, normalized));
+        if (!file) return sum;
+        const cap = file.tokenCount > 0 ? Math.min(file.tokenCount, 1200) : 0;
+        return sum + cap;
+      },
+      0
+    );
+
+    const essentialEstimate = Math.max(
+      diffTokenEstimate * 3,
+      Math.floor(changedFileTokens * 0.6),
+      diffTokenEstimate * 2 + 600
+    );
+
+    const modelCap =
+      selectedModelContextLength && selectedModelContextLength > 0
+        ? Math.floor(selectedModelContextLength * 0.6)
+        : Number.POSITIVE_INFINITY;
+
+    const expandedEstimate = Math.max(essentialEstimate, 1000);
+    const upperBound = Math.min(modelCap, Math.floor(expandedEstimate * 1.2));
+    const recommended = Math.floor(upperBound * SMART_CONTEXT_HEADROOM_RATIO);
+
+    if (Number.isFinite(recommended) && recommended > 0) {
+      setSmartContextBudgetTokens(recommended);
+    } else {
+      const fallback = Math.floor((diffTokenEstimate + changedFileTokens) * 0.8);
+      setSmartContextBudgetTokens(Math.max(1000, fallback));
+    }
+  }, [allFiles, selectedFiles, selectedFilesDiff, selectedDiffPaths, selectedModelContextLength]);
+
+  const handleModelContextChange = useCallback((model: ModelInfo | null) => {
+    setSelectedModelContextLength(model?.context_length ?? null);
+  }, []);
 
   // Handle model selection
   const handleModelSelect = (modelId: string) => {
@@ -1552,6 +2129,7 @@ const App = (): JSX.Element => {
               >
                 <FolderOpen size={16} />
               </button>
+              <SavedPromptsDropdown onInsert={handleInsertSavedPrompt} />
               <button
                 className="clear-data-btn"
                 onClick={clearSavedState}
@@ -1654,6 +2232,17 @@ const App = (): JSX.Element => {
               onSearchChange={handleSearchChange}
               selectAllFiles={selectAllFiles}
               deselectAllFiles={deselectAllFiles}
+              selectChangedFiles={selectChangedFiles}
+              gitChangedFiles={Object.values(gitChangedFiles)}
+              gitChangesLoading={isGitChangesLoading}
+              gitChangesError={gitChangesError}
+              onRefreshGitChanges={refreshGitChangedFiles}
+              onAddChangedFilesSinceCommit={handleAddFilesSinceCommit}
+              gitCommitHistory={gitCommitHistory}
+              loadCommitHistory={loadCommitHistory}
+              isCommitHistoryLoading={isCommitHistoryLoading}
+              commitHistoryError={commitHistoryError}
+              selectedDiffPaths={selectedDiffPaths}
               expandedNodes={expandedNodes}
               toggleExpanded={toggleExpanded}
               includeBinaryPaths={includeBinaryPaths}
@@ -1701,9 +2290,17 @@ const App = (): JSX.Element => {
               <div className="content-title">Selected Files</div>
               <div className="content-header-actions-group">
                 <div className="stats-info">
-                  {selectedFolder
-                    ? `${displayedFiles.length} files | ~${totalFormattedContentTokens.toLocaleString()} tokens`
-                    : '0 files | ~0 tokens'}
+                  {selectedFolder ? (
+                    <>
+                      <span>
+                        {selectedFiles.length} / {displayedFiles.length} selected
+                      </span>
+                      <span className="stats-separator">•</span>
+                      <span>~{totalFormattedContentTokens.toLocaleString()} tokens</span>
+                    </>
+                  ) : (
+                    '0 files | ~0 tokens'
+                  )}
                 </div>
                 {selectedFolder && (
                   <div className="sort-options">
@@ -1798,6 +2395,7 @@ const App = (): JSX.Element => {
                 externalSelectedModelId={selectedModelId}
                 onModelSelect={handleModelSelect}
                 currentTokenCount={totalFormattedContentTokens}
+                onModelContextChange={handleModelContextChange}
               />
             </div>
 
@@ -1826,6 +2424,104 @@ const App = (): JSX.Element => {
                   />
                   <label htmlFor="includeBinaryPaths">Include Binary As Paths</label>
                 </div>
+                <div
+                  className="toggle-option-item"
+                  title="Include Git Diffs in the Copyable Content"
+                >
+                  <ToggleSwitch
+                    id="includeGitDiffs"
+                    checked={includeGitDiffs}
+                    onChange={(e) => setIncludeGitDiffs(e.target.checked)}
+                  />
+                  <label htmlFor="includeGitDiffs">Include Git Diffs</label>
+                </div>
+                <div
+                  className="toggle-option-item"
+                  title="Use smart context to keep excerpts within a token budget"
+                >
+                  <ToggleSwitch
+                    id="smartContextEnabled"
+                    checked={smartContextEnabled}
+                    onChange={(e) => setSmartContextEnabled(e.target.checked)}
+                  />
+                  <label htmlFor="smartContextEnabled">Smart Context</label>
+                </div>
+                {smartContextEnabled && (
+                  <>
+                    <div
+                      className="toggle-option-item toggle-option-block"
+                      title="Token budget used when assembling smart context excerpts"
+                    >
+                      <label htmlFor="smartContextBudgetTokens">Context Budget (tokens)</label>
+                      <div className="toggle-option-actions">
+                        <input
+                          id="smartContextBudgetTokens"
+                          type="number"
+                          min={0}
+                          step={500}
+                          value={smartContextBudgetTokens}
+                          onChange={(e) => {
+                            const next = Number(e.target.value);
+                            if (Number.isNaN(next)) return;
+                            setSmartContextBudgetTokens(Math.max(0, Math.floor(next)));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="refresh-button"
+                          onClick={() => {
+                            void handleSuggestBudgetFromSelection();
+                          }}
+                        >
+                          Use Selection
+                        </button>
+                      </div>
+                      {(smartContextTokenBreakdown.diff > 0 ||
+                        smartContextTokenBreakdown.excerpts > 0) && (
+                        <div className="smart-context-meter">
+                          <span>
+                            Diff {smartContextTokenBreakdown.diff.toLocaleString()} tokens
+                          </span>
+                          <span className="smart-context-meter-separator">•</span>
+                          <span>
+                            Excerpts {smartContextTokenBreakdown.excerpts.toLocaleString()} tokens
+                          </span>
+                        </div>
+                      )}
+                      <small className="toggle-option-help">
+                        Total tokens for excerpts and diff.
+                      </small>
+                    </div>
+                    <div
+                      className="toggle-option-item toggle-option-block"
+                      title="Control how the token budget is split between the git diff and excerpts"
+                    >
+                      <label htmlFor="smartContextAllocation">Budget Emphasis</label>
+                      <div className="toggle-option-actions smart-context-allocation">
+                        {(
+                          [
+                            { id: 'balanced', label: 'Balanced' },
+                            { id: 'diff', label: 'Prefer Diff' },
+                            { id: 'excerpts', label: 'Prefer Excerpts' },
+                          ] as { id: SmartContextAllocation; label: string }[]
+                        ).map(({ id, label }) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className={`chip-button${smartContextAllocation === id ? ' active' : ''}`}
+                            onClick={() => setSmartContextAllocation(id)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <small className="toggle-option-help">
+                        Favor diff or excerpts when budget is tight; balanced keeps current
+                        behaviour.
+                      </small>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="copy-buttons-group">
                 <CopyHistoryButton

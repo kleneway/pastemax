@@ -155,6 +155,78 @@
   user-select: none;
 }
 
+.toggle-option-item.toggle-option-block {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  padding-top: var(--space-xs);
+}
+
+.toggle-option-item.toggle-option-block label {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.toggle-option-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.toggle-option-actions input[type='number'],
+.toggle-option-item.toggle-option-block input[type='number'] {
+  width: 140px;
+  max-width: 100%;
+}
+
+.toggle-option-help {
+  display: block;
+  color: var(--text-muted, #9ca3af);
+  font-size: var(--font-size-xs);
+}
+
+.smart-context-meter {
+  margin-top: var(--space-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.smart-context-meter-separator {
+  opacity: 0.6;
+}
+
+.smart-context-allocation {
+  gap: var(--space-xs);
+}
+
+.chip-button {
+  padding: 4px 10px;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.4));
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.chip-button:hover {
+  background: var(--background-secondary, rgba(148, 163, 184, 0.08));
+}
+
+.chip-button.active {
+  background: var(--primary-button-background);
+  color: var(--primary-button-text);
+  border-color: var(--primary-button-background);
+}
+
 .copy-settings-container > .copy-settings-options {
   flex-shrink: 0;
 }

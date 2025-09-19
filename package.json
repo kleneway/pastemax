@@ -11,6 +11,7 @@
     "build:electron": "node electron/build.js",
     "clean": "rimraf dist release-builds",
     "clean:all": "rimraf dist release-builds node_modules",
+    "test": "tsc --project tsconfig.test.json && node --test temp-tests/tests/*.js && rimraf temp-tests",
     "verify-build": "node scripts/verify-build.js",
     "test-build": "node scripts/test-local-build.js",
     "test-build:mac": "node scripts/test-local-build.js mac",
