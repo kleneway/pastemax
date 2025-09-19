@@ -233,9 +233,9 @@ test('diff path without hunks uses capped non-essential snippet', async () => {
     result.content.includes('File: /repo/src/ghost.ts (capped excerpt)'),
     'Expected capped excerpt label'
   );
-  assert.ok(result.content.includes('[lines 1-80]'), 'Expected head range');
-  assert.ok(result.content.includes('[lines 111-150]'), 'Expected tail range');
-  assert.ok(result.content.includes('…'), 'Expected ellipsis separating ranges');
+  assert.ok(result.content.includes('// [lines 1-80]'), 'Expected head range');
+  assert.ok(result.content.includes('// [lines 111-150]'), 'Expected tail range');
+  assert.ok(result.content.includes('// ...'), 'Expected ellipsis separating ranges');
   assert.ok(!result.content.includes('line 90'), 'Middle lines should be omitted');
 });
 

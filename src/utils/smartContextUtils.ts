@@ -1,6 +1,6 @@
 import { FileData } from '../types/FileTypes';
 import { getLanguageFromFilename } from './languageUtils';
-import { generateAsciiFileTree, normalizePath } from './pathUtils';
+import { basename, dirname, extname, generateAsciiFileTree, normalizePath } from './pathUtils';
 import { countTokensCached } from './tokenUtils';
 import { DiffHunk, DiffMap, parseUnifiedDiff } from './diffUtils';
 
@@ -25,6 +25,12 @@ interface IncludedVariant {
   tokens: number;
 }
 
+interface ScoredCandidate {
+  candidate: Candidate;
+  score: number;
+  path: string;
+}
+
 export interface SmartContextParams {
   files: FileData[];
   selectedFiles: string[];
@@ -41,19 +47,104 @@ export interface SmartContextParams {
   joinThreshold: number;
   smallFileTokenThreshold: number;
   tokenCounter?: (text: string) => Promise<number>;
+  allocationPreference?: 'balanced' | 'diff' | 'excerpts';
 }
 
 export interface SmartContextResult {
   content: string;
   tokenCount: number;
+  excerptTokenCount: number;
+  diffTokenCount: number;
 }
 
-const ELLIPSIS_LINE = '…';
 const RANGE_PREFIX = (start: number, end: number): string =>
   `[lines ${start}${end !== start ? `-${end}` : ''}]`;
 const DEFAULT_CAPPED_MAX_LINES = 120;
 const DEFAULT_CAPPED_HEAD_LINES = 80;
 const DEFAULT_CAPPED_TAIL_LINES = 40;
+const MAX_HELPER_CANDIDATES = 10;
+
+type CommentTokens = {
+  prefix: string;
+  suffix?: string;
+};
+
+function getCommentTokens(language: string): CommentTokens {
+  const normalized = language.toLowerCase();
+
+  const hashLanguages = new Set([
+    'python',
+    'shell',
+    'bash',
+    'sh',
+    'yaml',
+    'yml',
+    'ruby',
+    'coffee',
+    'coffeescript',
+    'dockerfile',
+    'makefile',
+    'ini',
+    'toml',
+    'hcl',
+    'terraform',
+    'perl',
+    'r',
+    'powershell',
+    'ps1',
+    'psm1',
+    'psd1',
+    'properties',
+  ]);
+
+  const sqlLanguages = new Set([
+    'sql',
+    'postgres',
+    'postgresql',
+    'mysql',
+    'sqlite',
+    'haskell',
+    'lua',
+  ]);
+  const dashLanguages = new Set(['elixir', 'erl', 'erlang']);
+  const htmlLikeLanguages = new Set(['html', 'xml', 'svg', 'markdown', 'mdx']);
+  const blockCommentLanguages = new Set(['css', 'scss', 'sass', 'less', 'stylus', 'graphql']);
+
+  if (hashLanguages.has(normalized)) {
+    return { prefix: '# ' };
+  }
+
+  if (sqlLanguages.has(normalized)) {
+    return { prefix: '-- ' };
+  }
+
+  if (dashLanguages.has(normalized)) {
+    return { prefix: '% ' };
+  }
+
+  if (blockCommentLanguages.has(normalized)) {
+    return { prefix: '/* ', suffix: ' */' };
+  }
+
+  if (htmlLikeLanguages.has(normalized)) {
+    return { prefix: '<!-- ', suffix: ' -->' };
+  }
+
+  return { prefix: '// ' };
+}
+
+function formatCommentLine(language: string, text: string): string {
+  const tokens = getCommentTokens(language);
+  return tokens.suffix ? `${tokens.prefix}${text}${tokens.suffix}` : `${tokens.prefix}${text}`;
+}
+
+function formatRangeComment(language: string, start: number, end: number): string {
+  return formatCommentLine(language, RANGE_PREFIX(start, end));
+}
+
+function formatEllipsisComment(language: string): string {
+  return formatCommentLine(language, '...');
+}
 
 export async function assembleSmartContextContent(
   params: SmartContextParams
@@ -74,6 +165,7 @@ export async function assembleSmartContextContent(
     joinThreshold,
     smallFileTokenThreshold,
     tokenCounter = countTokensCached,
+    allocationPreference = 'balanced',
   } = params;
 
   const effectiveContext = Math.max(0, contextLines);
@@ -90,10 +182,34 @@ export async function assembleSmartContextContent(
     }
   });
 
+  const diffFilePaths = Array.from(diffMap.keys());
+  const diffDirectories = new Set<string>();
+  const diffExtensions = new Set<string>();
+  const diffBaseNames = new Set<string>();
+
+  diffFilePaths.forEach((path) => {
+    const normalized = normalizePath(path);
+    if (normalized) {
+      diffPathSet.add(normalized);
+      const directory = dirname(normalized);
+      const normalizedDir = directory && directory !== '.' ? directory : '/';
+      diffDirectories.add(normalizedDir);
+      const extension = extname(normalized);
+      if (extension) {
+        diffExtensions.add(extension.toLowerCase());
+      }
+      const name = basename(normalized);
+      if (name) {
+        diffBaseNames.add(name.toLowerCase());
+      }
+    }
+  });
+
   const sortedFiles = sortSelectedFiles(files, selectedFiles, sortOrder);
 
   const binaryEntries: string[] = [];
   const candidates: Candidate[] = [];
+  const helperCandidates: ScoredCandidate[] = [];
 
   sortedFiles.forEach((file) => {
     const normalizedPath = normalizePath(file.path);
@@ -148,20 +264,54 @@ export async function assembleSmartContextContent(
     }
 
     if (file.tokenCount <= smallFileTokenThreshold) {
-      candidates.push({
-        priority: 1,
-        variants: buildFullVariants(file, language),
-        isEssential: false,
-      });
+      const score = computeHelperScore(
+        normalizedPath,
+        diffDirectories,
+        diffExtensions,
+        diffBaseNames
+      );
+      if (score > 0) {
+        helperCandidates.push({
+          candidate: {
+            priority: 1,
+            variants: buildFullVariants(file, language),
+            isEssential: false,
+          },
+          score,
+          path: normalizedPath,
+        });
+      }
     } else {
-      // Large non-diff file: include as low-priority full content (may be dropped by budget)
-      candidates.push({
-        priority: 2,
-        variants: buildFullVariants(file, language),
-        isEssential: false,
-      });
+      const score = computeHelperScore(
+        normalizedPath,
+        diffDirectories,
+        diffExtensions,
+        diffBaseNames
+      );
+      const minScore = diffDirectories.size ? 3 : 1;
+      if (score >= minScore) {
+        helperCandidates.push({
+          candidate: {
+            priority: 2,
+            variants: buildFullVariants(file, language),
+            isEssential: false,
+          },
+          score,
+          path: normalizedPath,
+        });
+      }
     }
   });
+
+  helperCandidates
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.path.localeCompare(b.path);
+    })
+    .slice(0, MAX_HELPER_CANDIDATES)
+    .forEach(({ candidate }) => {
+      candidates.push(candidate);
+    });
 
   let diffSection = '';
   let diffTokens = 0;
@@ -177,9 +327,18 @@ export async function assembleSmartContextContent(
   }
 
   const enforceBudget = Number.isFinite(budgetTokens);
-  const availableBudget = enforceBudget ? Math.max(budgetTokens - diffTokens, 0) : budgetTokens;
+  let adjustedDiffCost = diffTokens;
+  if (allocationPreference === 'diff') {
+    adjustedDiffCost = Math.ceil(diffTokens * 1.3);
+  } else if (allocationPreference === 'excerpts') {
+    adjustedDiffCost = Math.floor(diffTokens * 0.7);
+  }
 
-  const { included } = await selectVariantsWithinBudget({
+  const availableBudget = enforceBudget
+    ? Math.max(budgetTokens - adjustedDiffCost, 0)
+    : budgetTokens;
+
+  const { included, totalTokens: excerptTokens } = await selectVariantsWithinBudget({
     candidates,
     budgetTokens: availableBudget,
     enforceBudget,
@@ -221,6 +380,8 @@ export async function assembleSmartContextContent(
   return {
     content: baseContent,
     tokenCount,
+    excerptTokenCount: excerptTokens,
+    diffTokenCount: diffTokens,
   };
 }
 
@@ -250,8 +411,11 @@ function sortSelectedFiles(
 
 function buildBinaryEntry(file: FileData): string {
   const normalizedPath = normalizePath(file.path);
-  const fileType = getLanguageFromFilename(file.name);
-  return `File: ${normalizedPath}\nThis is a file of the type: ${fileType.charAt(0).toUpperCase()}${fileType.slice(1)}`;
+  const fileType = getLanguageFromFilename(file.name) || 'binary';
+  const sizeKb = Math.max(1, Math.round(file.size / 1024));
+  const extension = extname(file.name);
+  const label = extension ? extension.toLowerCase() : fileType.toLowerCase();
+  return `File: ${normalizedPath} (binary, ${label}, ${sizeKb} KB)`;
 }
 
 function buildFullVariants(file: FileData, language: string): CandidateVariant[] {
@@ -318,11 +482,11 @@ function buildCappedVariant(
   const snippet = ranges
     .map(({ start, end }) => {
       const segmentLines = lines.slice(start - 1, end);
-      const header = RANGE_PREFIX(start, end);
+      const header = formatRangeComment(language, start, end);
       const body = segmentLines.join('\n');
       return body ? `${header}\n${body}` : header;
     })
-    .join(`\n${ELLIPSIS_LINE}\n`);
+    .join(`\n${formatEllipsisComment(language)}\n`);
 
   const label = totalLines > effectiveMax ? ' (capped excerpt)' : ' (excerpt)';
   const content = `File: ${normalizedPath}${label}\n\`\`\`${language}\n${ensureTrailingNewline(
@@ -362,11 +526,11 @@ function buildExcerptVariants(params: ExcerptBuilderParams): CandidateVariant[] 
     const snippet = ranges
       .map(({ start, end }) => {
         const segmentLines = lines.slice(start - 1, end);
-        const header = RANGE_PREFIX(start, end);
+        const header = formatRangeComment(language, start, end);
         const body = segmentLines.join('\n');
         return body ? `${header}\n${body}` : header;
       })
-      .join(`\n${ELLIPSIS_LINE}\n`);
+      .join(`\n${formatEllipsisComment(language)}\n`);
 
     const content = `File: ${normalizedPath} (excerpt)\n\`\`\`${language}\n${ensureTrailingNewline(snippet)}\`\`\`\n\n`;
     variants.push({ content, contextLines: context });
@@ -526,6 +690,45 @@ function findUniqueSuffixMatch(
   }
 
   return undefined;
+}
+
+function computeHelperScore(
+  filePath: string,
+  diffDirectories: Set<string>,
+  diffExtensions: Set<string>,
+  diffBaseNames: Set<string>
+): number {
+  let score = 0;
+  const normalized = normalizePath(filePath);
+  const directory = dirname(normalized);
+  const normalizedDir = directory && directory !== '.' ? directory : '/';
+  const baseName = basename(normalized).toLowerCase();
+  const extension = extname(normalized).toLowerCase();
+
+  if (!diffDirectories.size) {
+    return 1; // No diffs to compare against – allow helpful context.
+  }
+
+  if (diffDirectories.has(normalizedDir)) {
+    score += 3;
+  } else {
+    for (const diffDir of diffDirectories) {
+      if (normalizedDir.startsWith(`${diffDir}/`)) {
+        score += 2;
+        break;
+      }
+    }
+  }
+
+  if (diffBaseNames.has(baseName)) {
+    score += 2;
+  }
+
+  if (extension && diffExtensions.has(extension)) {
+    score += 1;
+  }
+
+  return score;
 }
 
 interface SelectionParams {

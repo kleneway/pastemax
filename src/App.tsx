@@ -72,12 +72,19 @@ const STORAGE_KEYS = {
   COPY_HISTORY: 'pastemax-copy-history',
   SMART_CONTEXT_ENABLED: 'pastemax-smart-context-enabled',
   SMART_CONTEXT_BUDGET_TOKENS: 'pastemax-smart-context-budget-tokens',
+  SMART_CONTEXT_ALLOCATION: 'pastemax-smart-context-allocation',
 };
 
-const SMART_CONTEXT_JOIN_THRESHOLD = 10;
-const SMART_CONTEXT_SMALL_FILE_TOKENS = 800;
-const LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY = 'pastemax-smart-context-budget-percent';
 const SMART_CONTEXT_DEFAULT_CONTEXT_LINES = 12;
+const SMART_CONTEXT_SMALL_FILE_TOKENS = 400;
+const LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY = 'pastemax-smart-context-budget-percent';
+const SMART_CONTEXT_HEADROOM_RATIO = 0.8;
+
+type SmartContextAllocation = 'balanced' | 'diff' | 'excerpts';
+
+function computeJoinThreshold(contextLines: number): number {
+  return Math.max(2, Math.min(contextLines * 2, 20));
+}
 
 /* ============================== MAIN APP COMPONENT ============================== */
 /**
@@ -192,6 +199,18 @@ const App = (): JSX.Element => {
       return Math.max(fallback, 4000);
     }
     return 20000;
+  });
+  const [smartContextAllocation, setSmartContextAllocation] = useState<SmartContextAllocation>(
+    () => {
+      const stored = localStorage.getItem(
+        STORAGE_KEYS.SMART_CONTEXT_ALLOCATION
+      ) as SmartContextAllocation | null;
+      return stored ?? 'balanced';
+    }
+  );
+  const [smartContextTokenBreakdown, setSmartContextTokenBreakdown] = useState({
+    diff: 0,
+    excerpts: 0,
   });
   const [selectedModelContextLength, setSelectedModelContextLength] = useState<number | null>(null);
 
@@ -385,12 +404,22 @@ const App = (): JSX.Element => {
   }, [smartContextEnabled]);
 
   useEffect(() => {
+    if (!smartContextEnabled) {
+      setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
+    }
+  }, [smartContextEnabled]);
+
+  useEffect(() => {
     localStorage.setItem(
       STORAGE_KEYS.SMART_CONTEXT_BUDGET_TOKENS,
       String(smartContextBudgetTokens)
     );
     localStorage.removeItem(LEGACY_SMART_CONTEXT_BUDGET_PERCENT_KEY);
   }, [smartContextBudgetTokens]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SMART_CONTEXT_ALLOCATION, smartContextAllocation);
+  }, [smartContextAllocation]);
 
   useEffect(() => {
     if (
@@ -1024,6 +1053,7 @@ const App = (): JSX.Element => {
   const refreshBaseContent = useCallback(async () => {
     if (!selectedFiles.length) {
       setCachedBaseContentTokens(0);
+      setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
       return { content: '', tokenCount: 0 };
     }
 
@@ -1051,14 +1081,20 @@ const App = (): JSX.Element => {
           gitDiff: includeGitDiffs ? optimizedDiff : undefined,
           budgetTokens: computedBudget,
           contextLines: SMART_CONTEXT_DEFAULT_CONTEXT_LINES,
-          joinThreshold: SMART_CONTEXT_JOIN_THRESHOLD,
+          joinThreshold: computeJoinThreshold(SMART_CONTEXT_DEFAULT_CONTEXT_LINES),
           smallFileTokenThreshold: SMART_CONTEXT_SMALL_FILE_TOKENS,
+          allocationPreference: smartContextAllocation,
         });
         setCachedBaseContentTokens(result.tokenCount);
+        setSmartContextTokenBreakdown({
+          diff: result.diffTokenCount,
+          excerpts: result.excerptTokenCount,
+        });
         return result;
       } catch (error) {
         console.error('Error assembling smart context content:', error);
         setCachedBaseContentTokens(0);
+        setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
         return { content: '', tokenCount: 0 };
       }
     }
@@ -1082,15 +1118,18 @@ const App = (): JSX.Element => {
         const result = await window.electron.ipcRenderer.invoke('get-token-count', baseContent);
         const tokenCount = typeof result?.tokenCount === 'number' ? result.tokenCount : 0;
         setCachedBaseContentTokens(tokenCount);
+        setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
         return { content: baseContent, tokenCount };
       } catch (error) {
         console.error('Error getting base content token count:', error);
         setCachedBaseContentTokens(0);
+        setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
         return { content: baseContent, tokenCount: 0 };
       }
     }
 
     setCachedBaseContentTokens(0);
+    setSmartContextTokenBreakdown({ diff: 0, excerpts: 0 });
     return { content: baseContent, tokenCount: 0 };
   }, [
     allFiles,
@@ -1105,6 +1144,7 @@ const App = (): JSX.Element => {
     selectedModelContextLength,
     smartContextBudgetTokens,
     smartContextEnabled,
+    smartContextAllocation,
     sortOrder,
   ]);
 
@@ -1994,33 +2034,49 @@ const App = (): JSX.Element => {
       return;
     }
 
-    const baseTokens = selectedFiles.reduce((sum, path) => {
-      const normalized = normalizePath(path);
-      const file = allFiles.find((f) => arePathsEqual(f.path, normalized));
-      return sum + (file?.tokenCount ?? 0);
-    }, 0);
-
-    let diffTokens = 0;
-    if (includeGitDiffs && selectedFilesDiff.trim()) {
+    const diffText = selectedFilesDiff.trim();
+    let diffTokenEstimate = 0;
+    if (diffText) {
       try {
-        diffTokens = await countTokensCached(selectedFilesDiff.trim());
+        diffTokenEstimate = await countTokensCached(diffText);
       } catch (error) {
         console.error('Error estimating diff token count:', error);
       }
     }
 
-    const total = baseTokens + diffTokens;
-    const clamped =
-      selectedModelContextLength && selectedModelContextLength > 0 && total > 0
-        ? Math.min(total, selectedModelContextLength)
-        : total;
+    const changedFileTokens = (selectedDiffPaths.length ? selectedDiffPaths : selectedFiles).reduce(
+      (sum, path) => {
+        const normalized = normalizePath(path);
+        const file = allFiles.find((f) => arePathsEqual(f.path, normalized));
+        if (!file) return sum;
+        const cap = file.tokenCount > 0 ? Math.min(file.tokenCount, 1200) : 0;
+        return sum + cap;
+      },
+      0
+    );
 
-    setSmartContextBudgetTokens(Math.max(0, Math.floor(clamped)));
-  }, [allFiles, includeGitDiffs, selectedFiles, selectedFilesDiff, selectedModelContextLength]);
+    const essentialEstimate = Math.max(
+      diffTokenEstimate * 3,
+      Math.floor(changedFileTokens * 0.6),
+      diffTokenEstimate * 2 + 600
+    );
 
-  const handleApplySmartContextSettings = useCallback(() => {
-    void refreshBaseContent();
-  }, [refreshBaseContent]);
+    const modelCap =
+      selectedModelContextLength && selectedModelContextLength > 0
+        ? Math.floor(selectedModelContextLength * 0.6)
+        : Number.POSITIVE_INFINITY;
+
+    const expandedEstimate = Math.max(essentialEstimate, 1000);
+    const upperBound = Math.min(modelCap, Math.floor(expandedEstimate * 1.2));
+    const recommended = Math.floor(upperBound * SMART_CONTEXT_HEADROOM_RATIO);
+
+    if (Number.isFinite(recommended) && recommended > 0) {
+      setSmartContextBudgetTokens(recommended);
+    } else {
+      const fallback = Math.floor((diffTokenEstimate + changedFileTokens) * 0.8);
+      setSmartContextBudgetTokens(Math.max(1000, fallback));
+    }
+  }, [allFiles, selectedFiles, selectedFilesDiff, selectedDiffPaths, selectedModelContextLength]);
 
   const handleModelContextChange = useCallback((model: ModelInfo | null) => {
     setSelectedModelContextLength(model?.context_length ?? null);
@@ -2419,16 +2475,49 @@ const App = (): JSX.Element => {
                         >
                           Use Selection
                         </button>
-                        <button
-                          type="button"
-                          className="refresh-button"
-                          onClick={handleApplySmartContextSettings}
-                        >
-                          Apply
-                        </button>
                       </div>
+                      {(smartContextTokenBreakdown.diff > 0 ||
+                        smartContextTokenBreakdown.excerpts > 0) && (
+                        <div className="smart-context-meter">
+                          <span>
+                            Diff {smartContextTokenBreakdown.diff.toLocaleString()} tokens
+                          </span>
+                          <span className="smart-context-meter-separator">•</span>
+                          <span>
+                            Excerpts {smartContextTokenBreakdown.excerpts.toLocaleString()} tokens
+                          </span>
+                        </div>
+                      )}
                       <small className="toggle-option-help">
                         Total tokens for excerpts and diff.
+                      </small>
+                    </div>
+                    <div
+                      className="toggle-option-item toggle-option-block"
+                      title="Control how the token budget is split between the git diff and excerpts"
+                    >
+                      <label htmlFor="smartContextAllocation">Budget Emphasis</label>
+                      <div className="toggle-option-actions smart-context-allocation">
+                        {(
+                          [
+                            { id: 'balanced', label: 'Balanced' },
+                            { id: 'diff', label: 'Prefer Diff' },
+                            { id: 'excerpts', label: 'Prefer Excerpts' },
+                          ] as { id: SmartContextAllocation; label: string }[]
+                        ).map(({ id, label }) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className={`chip-button${smartContextAllocation === id ? ' active' : ''}`}
+                            onClick={() => setSmartContextAllocation(id)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <small className="toggle-option-help">
+                        Favor diff or excerpts when budget is tight; balanced keeps current
+                        behaviour.
                       </small>
                     </div>
                   </>
