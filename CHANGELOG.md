@@ -3,11 +3,17 @@
 ### Added
 
 - **Sidebar Folder Navigation:**
-  - Added "Collapse All" and "Expand All" buttons to the file tree sidebar for easier navigation of folder structures, using `FolderMinus` and `FolderPlus` icons respectively.
+  - Added "Collapse All" and "Expand All" buttons to the file tree sidebar for easier navigation of folder structures, using `ExpandAllIcon.tsx` and `CollapseAllIcon.tsx` icons respectively.
   - Implemented functionality to recursively collapse or expand all directory nodes.
 
 ### Improved
 
+- **Improved Collapse All and Expand All**
+  - Adjusted the "Collapse All" and "Expand All" to use custom icons from `ExpandAllIcon.tsx` and `CollapseAllIcon.tsx` for better visual clarity.
+  - Ensured that the collapse and expand functions correctly handle all nested folders in the file tree.
+  - Ensured it supports cross-platform path handling for both Windows and Unix-like environments.
+- **Moved user_instructions to be on top of copied content:**
+  - Moved to top of text for better LLM attention, based on research papers on long context prompts.
 - **Changed all main button in Header and Sidebar to use Lucide React Icons:**
   - Adjusted the buttons used in the header and sidebar to use Lucide React Icons for a more modern and consistent look.
 - **UI Consistency for Selected Folder Display:**
@@ -16,6 +22,13 @@
   - When no folder is selected the message "Select Folder" is now using the folder icon from Lucide React Icons.
 - **Sidebar Action Button States:**
   - Differentiated `:hover`, `:focus`, and `:active` CSS states for sidebar action buttons (`.sidebar-action-btn`) to prevent the "stuck" hover appearance after clicking and improve visual feedback.
+
+### Fixed
+- **Fix watcher live updates:**
+  - Fixed FilePreviewModal live updates: Changed from using stale previewFiles state to live useMemo that recomputes from current files prop
+  - Improved file watcher: Fixed root directory path handling and added memory leak prevention
+  - Enhanced documentation: Updated README, converted tiktoken docs, added comprehensive file watcher documentation
+
 
 ## [1.1.0] - 2025-05-18
 

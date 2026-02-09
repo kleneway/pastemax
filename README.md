@@ -29,7 +29,7 @@ PasteMax is a simple desktop app built for developers using AI coding assistants
 
 ## Features
 
-### 📁 File Navigation & Management
+### File Navigation & Management
 
 - **File Tree Navigation**: Browse directories and files with an expandable tree view
 - **Search Capabilities**: Quickly find files by name or content
@@ -37,20 +37,20 @@ PasteMax is a simple desktop app built for developers using AI coding assistants
 - **File Change Watcher**: Automatically updates the file list when files are added, modified, or deleted
 - **Manual Refresh**: Option to perform a full directory re-scan when needed
 
-### 🤖 AI-Ready Features
+### AI-Ready Features
 
 - **Token Counting**: View approximate token count for each file
 - **Model Context Limit**: Select different models (Claude-3.7, GPT-4o, Gemini 2.5, etc.)
 - **Context Limit Warning**: Get alerted when selections exceed the model's context limit
 
-### 🔍 Content & Preview
+### Content & Preview
 
 - **File Previewer**: View file contents in a dedicated preview pane
 - **Selection Management**: Select multiple files and copy their contents together
 - **Binary File Detection**: Automatic detection and exclusion of binary files
 - **Smart File Exclusion**: Auto-excludes package-lock.json, node_modules, etc.
 
-### 💼 Workflow Enhancements
+### Workflow Enhancements
 
 - **Workspace Management**: Save and load workspaces for quick directory access
 - **Automatic Update Checker**: Stay current with the latest releases
@@ -153,18 +153,6 @@ npm run package
   - `styles/` - CSS styles
   - `assets/` - Static assets like images
 - `electron/` - Electron-Backend related files
-  - `main.js` - Electron main process
-  - `preload.js` - Preload script for secure IPC
-  - `renderer.js` - Renderer process utilities
-  - `build.js` - Build script for production
-  - `dev.js` - Development script
-  - `excluded-files.js` - Configuration for files to exclude by default
-  - `file-processor.js` - File processing utilities
-  - `ignore-manager.js` - Ignore pattern management
-  - `update-checker.js` - Update checking functionality
-  - `update-manager.js` - Update management
-  - `utils.js` - Utility functions
-  - `watcher.js` - File change watcher
 - `public/` - Public assets (favicon, etc.)
 - `scripts/` - Utility scripts for building and testing
 - `docs/` - Documentation
