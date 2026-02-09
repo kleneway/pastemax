@@ -1,6 +1,6 @@
 {
   "name": "pastemax",
-  "version": "v1.1.0-stable",
+  "version": "v1.1.1-stable",
   "main": "electron/main.js",
   "scripts": {
     "dev:all": "concurrently \"npm:dev\" \"npm:dev:electron\"",

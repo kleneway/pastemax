@@ -1,4 +1,4 @@
-## [1.1.1] - 2025-05-23
+## [1.1.1] - 2025-02-09
 
 ### Added
 
@@ -8,6 +8,9 @@
 
 ### Improved
 
+- **As pastemax is now a fully portable/setup application, the Docker environment is no longer required.**:
+  - Delete Dockerfile, docker-compose.yml, and README.docker.md.
+  - Docker-based build setup is no longer necessary for this project.
 - **Improved Collapse All and Expand All**
   - Adjusted the "Collapse All" and "Expand All" to use custom icons from `ExpandAllIcon.tsx` and `CollapseAllIcon.tsx` for better visual clarity.
   - Ensured that the collapse and expand functions correctly handle all nested folders in the file tree.
