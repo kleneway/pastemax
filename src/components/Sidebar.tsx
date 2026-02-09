@@ -339,7 +339,15 @@ const Sidebar = ({
         setSelectedFolderNode={setSelectedFolderNode}
       />
     ));
-  }, [visibleTree, selectedFiles, toggleFileSelection, toggleFolderSelection, toggleExpanded, selectedFolderNode, setSelectedFolderNode]);
+  }, [
+    visibleTree,
+    selectedFiles,
+    toggleFileSelection,
+    toggleFolderSelection,
+    toggleExpanded,
+    selectedFolderNode,
+    setSelectedFolderNode,
+  ]);
 
   return (
     <div className="sidebar" style={{ width: `${sidebarWidth}px` }}>
@@ -388,13 +396,13 @@ const Sidebar = ({
           onClick={expandAllFolders}
           title={
             selectedFolderNode
-              ? "Expand selected folder (click again for all folders)"
-              : "Expand all folders"
+              ? 'Expand selected folder (click again for all folders)'
+              : 'Expand all folders'
           }
           aria-label={
             selectedFolderNode
-              ? "Expand selected folder (click again for all folders)"
-              : "Expand all folders"
+              ? 'Expand selected folder (click again for all folders)'
+              : 'Expand all folders'
           }
         >
           <ExpandAllIcon />
@@ -404,13 +412,13 @@ const Sidebar = ({
           onClick={collapseAllFolders}
           title={
             selectedFolderNode
-              ? "Collapse selected folder (click again for all folders)"
-              : "Collapse all folders"
+              ? 'Collapse selected folder (click again for all folders)'
+              : 'Collapse all folders'
           }
           aria-label={
             selectedFolderNode
-              ? "Collapse selected folder (click again for all folders)"
-              : "Collapse all folders"
+              ? 'Collapse selected folder (click again for all folders)'
+              : 'Collapse all folders'
           }
         >
           <CollapseAllIcon />

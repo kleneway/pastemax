@@ -24,11 +24,11 @@
   - Differentiated `:hover`, `:focus`, and `:active` CSS states for sidebar action buttons (`.sidebar-action-btn`) to prevent the "stuck" hover appearance after clicking and improve visual feedback.
 
 ### Fixed
+
 - **Fix watcher live updates:**
   - Fixed FilePreviewModal live updates: Changed from using stale previewFiles state to live useMemo that recomputes from current files prop
   - Improved file watcher: Fixed root directory path handling and added memory leak prevention
   - Enhanced documentation: Updated README, converted tiktoken docs, added comprehensive file watcher documentation
-
 
 ## [1.1.0] - 2025-05-18
 

@@ -13,7 +13,7 @@ console.log(`Running file watcher tests in: ${testDir}`);
 console.log('Make sure PasteMax is running and watching this directory!\n');
 
 // Helper function to wait
-const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Helper function to create a test file
 function createTestFile(filename, content) {

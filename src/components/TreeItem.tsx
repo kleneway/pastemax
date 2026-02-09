@@ -191,7 +191,15 @@ const TreeItem = ({
     } else if (type === 'file' && !isCheckboxDisabled) {
       toggleFileSelection(path);
     }
-  }, [type, id, path, selectedFolderNode, setSelectedFolderNode, toggleFileSelection, isCheckboxDisabled]);
+  }, [
+    type,
+    id,
+    path,
+    selectedFolderNode,
+    setSelectedFolderNode,
+    toggleFileSelection,
+    isCheckboxDisabled,
+  ]);
 
   const handleCheckboxChange = useCallback(
     (e: any) => {

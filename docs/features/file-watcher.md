@@ -13,6 +13,7 @@ When you select a folder in PasteMax, the application not only scans the directo
 ## How It Works
 
 ### Technology
+
 - Uses the `chokidar` library for cross-platform file system monitoring
 - Implements debouncing for file modifications to prevent excessive updates
 - Respects the same ignore patterns as the initial directory scan
@@ -20,16 +21,19 @@ When you select a folder in PasteMax, the application not only scans the directo
 ### Supported Operations
 
 1. **File Addition**
+
    - New files appear in the sidebar tree automatically
    - Token count is calculated for new text files
    - Files are immediately selectable
 
 2. **File Modification**
+
    - Token counts update when file content changes
    - File size updates are reflected
    - Changes are debounced (500ms) to handle rapid saves gracefully
 
 3. **File Deletion**
+
    - Removed files disappear from the UI
    - If a deleted file was selected, it's removed from the selection
    - Total token count updates accordingly

@@ -42,7 +42,7 @@ async function initializeWatcher(
     ignored: (filePath) => {
       try {
         const relativePath = safeRelativePath(rootDir, filePath);
-        
+
         // Handle root directory case - if relativePath is empty string, it's the root directory
         if (relativePath === '') {
           return false; // Don't ignore the root directory itself
@@ -105,9 +105,9 @@ async function initializeWatcher(
         relativePath: fileData?.relativePath,
         tokenCount: fileData?.tokenCount,
         size: fileData?.size,
-        isBinary: fileData?.isBinary
+        isBinary: fileData?.isBinary,
       });
-      
+
       if (fileData && window && !window.isDestroyed()) {
         console.log(
           `[WatcherModule][IPC] Sending 'file-added' for: ${fileData.relativePath}. Full data:`,
@@ -137,9 +137,9 @@ async function initializeWatcher(
         relativePath: fileData?.relativePath,
         tokenCount: fileData?.tokenCount,
         size: fileData?.size,
-        isBinary: fileData?.isBinary
+        isBinary: fileData?.isBinary,
       });
-      
+
       if (fileData && window && !window.isDestroyed()) {
         console.log(
           `[WatcherModule][IPC] Sending 'file-updated' for: ${fileData.relativePath}. Full data:`,
@@ -168,18 +168,18 @@ async function initializeWatcher(
     console.log(`[WatcherModule] File Removed: ${filePath}`);
     try {
       removeFileCacheEntry(filePath); // Use new function name
-      
+
       // Clean up debounce map to prevent memory leak
       if (changeDebounceMap.has(filePath)) {
         changeDebounceMap.delete(filePath);
         console.log(`[WatcherModule] Cleaned up debounce handler for: ${filePath}`);
       }
-      
+
       const normalizedPath = normalizePath(filePath);
       const relativePath = safeRelativePath(rootDir, normalizedPath);
       const eventData = { path: normalizedPath, relativePath: relativePath };
       console.log(`[WatcherModule] Data to be sent for 'file-removed':`, eventData);
-      
+
       if (window && !window.isDestroyed() && relativePath) {
         console.log(
           `[WatcherModule][IPC] Sending 'file-removed' for: ${relativePath}. Full data:`,

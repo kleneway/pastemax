@@ -757,7 +757,9 @@ const App = (): JSX.Element => {
     setAllFiles((prevFiles: FileData[]) => {
       const isDuplicate = prevFiles.some((f) => arePathsEqual(f.path, newFile.path));
       const newAllFiles = isDuplicate ? prevFiles : [...prevFiles, newFile];
-      console.log(`[IPC] file-added: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Path: ${newFile.path}`);
+      console.log(
+        `[IPC] file-added: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Path: ${newFile.path}`
+      );
       return newAllFiles;
     });
   }, []);
@@ -765,10 +767,12 @@ const App = (): JSX.Element => {
   const handleFileUpdated = useCallback((updatedFile: FileData) => {
     console.log('[IPC] Received file-updated:', updatedFile);
     setAllFiles((prevFiles: FileData[]) => {
-      const newAllFiles = prevFiles.map((file) => 
+      const newAllFiles = prevFiles.map((file) =>
         arePathsEqual(file.path, updatedFile.path) ? updatedFile : file
       );
-      console.log(`[IPC] file-updated: Count remains: ${newAllFiles.length}, Updated path: ${updatedFile.path}`);
+      console.log(
+        `[IPC] file-updated: Count remains: ${newAllFiles.length}, Updated path: ${updatedFile.path}`
+      );
       return newAllFiles;
     });
   }, []);
@@ -778,17 +782,21 @@ const App = (): JSX.Element => {
       const path = typeof filePathData === 'object' ? filePathData.path : filePathData;
       const normalizedPath = normalizePath(path);
       console.log('[IPC] Received file-removed:', filePathData);
-      
+
       setAllFiles((prevFiles: FileData[]) => {
         const newAllFiles = prevFiles.filter((file) => !arePathsEqual(file.path, normalizedPath));
-        console.log(`[IPC] file-removed: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Removed path: ${normalizedPath}`);
+        console.log(
+          `[IPC] file-removed: Previous count: ${prevFiles.length}, New count: ${newAllFiles.length}, Removed path: ${normalizedPath}`
+        );
         return newAllFiles;
       });
-      
+
       setSelectedFiles((prevSelected: string[]) => {
         const newSelected = prevSelected.filter((p) => !arePathsEqual(p, normalizedPath));
         if (newSelected.length !== prevSelected.length) {
-          console.log(`[IPC] file-removed: Also removed from selectedFiles. Path: ${normalizedPath}`);
+          console.log(
+            `[IPC] file-removed: Also removed from selectedFiles. Path: ${normalizedPath}`
+          );
         }
         return newSelected;
       });
@@ -1026,9 +1034,10 @@ const App = (): JSX.Element => {
       const normalizedSelectedFolder = selectedFolder ? normalizePath(selectedFolder) : '';
       const normalizedFilePath = normalizePath(file.path);
 
-      const relativePath = normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
-        ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1)
-        : normalizedFilePath;
+      const relativePath =
+        normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
+          ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1)
+          : normalizedFilePath;
 
       const parts = relativePath.split('/');
       let currentPath = '';
@@ -1083,7 +1092,13 @@ const App = (): JSX.Element => {
     setExpandedNodes(newExpandedNodes);
     localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
     setLastExpandCollapseWasSelected(false);
-  }, [selectedFolderNode, lastExpandCollapseWasSelected, collapseSelectedFolder, getAllDirectoryNodeIds, setExpandedNodes]);
+  }, [
+    selectedFolderNode,
+    lastExpandCollapseWasSelected,
+    collapseSelectedFolder,
+    getAllDirectoryNodeIds,
+    setExpandedNodes,
+  ]);
 
   const expandSelectedFolder = useCallback(() => {
     if (!selectedFolderNode) return;
@@ -1102,8 +1117,6 @@ const App = (): JSX.Element => {
     setExpandedNodes(newExpandedNodes);
     localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
   }, [selectedFolderNode, getAllDirectoryNodeIds, expandedNodes, setExpandedNodes]);
-
-
 
   const expandAllFolders = useCallback(() => {
     if (selectedFolderNode && !lastExpandCollapseWasSelected) {
