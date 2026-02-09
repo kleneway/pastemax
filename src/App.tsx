@@ -28,6 +28,7 @@ import CopyHistoryModal, { CopyHistoryItem } from './components/CopyHistoryModal
 import CopyHistoryButton from './components/CopyHistoryButton';
 import ModelDropdown from './components/ModelDropdown';
 import ToggleSwitch from './components/base/ToggleSwitch';
+import SavedPromptsDropdown from './components/SavedPromptsDropdown';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -1535,6 +1536,17 @@ const App = (): JSX.Element => {
     }
   };
 
+  // Insert a saved prompt into the user instructions
+  const handleInsertSavedPrompt = (promptText: string) => {
+    setUserInstructions((prev) => {
+      const trimmedPrev = (prev || '').trim();
+      // Place saved prompt at the top, followed by any existing notes
+      return trimmedPrev
+        ? `${promptText}\n\n${trimmedPrev}`
+        : promptText;
+    });
+  };
+
   // Handle copy from history
   const handleCopyFromHistory = async (content: string) => {
     try {
@@ -1619,6 +1631,7 @@ const App = (): JSX.Element => {
               >
                 <FolderOpen size={16} />
               </button>
+              <SavedPromptsDropdown onInsert={handleInsertSavedPrompt} />
               <button
                 className="clear-data-btn"
                 onClick={clearSavedState}
